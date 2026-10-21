@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Edit(./.env)",
+      "Read(//c/hun_data/**)",
+      "Edit(//c/hun_data/**)",
+      "Read(**/*.parquet)",
+      "Read(**/*.csv)",
+      "Read(**/*.xlsx)",
+      "Read(**/*.pbix)",
+      "Read(~/AppData/Roaming/DBeaverData/**)",
+      "Bash(python -m hun.extract *)",
+      "Bash(git commit --no-verify *)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)"
+    ]
+  }
+}

@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+from sqlalchemy import text
 
 from . import config
 from .db import engine
@@ -25,7 +26,7 @@ def run_sql_file(sql_path: str | Path, nombre: str | None = None) -> Path:
     nombre = nombre or sql_path.stem
     out = out_dir / f"{nombre}.parquet"
 
-    df = pd.read_sql_query(query, engine())
+    df = pd.read_sql_query(text(query), engine())
     df.to_parquet(out, index=False)
 
     # Solo metadatos en consola: forma y columnas, nunca filas

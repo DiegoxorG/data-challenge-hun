@@ -113,3 +113,6 @@ desktop.ini
 .vscode/
 .idea/
 *.log
+
+# --- Claude Code ------------------------------------------------------
+.claude/settings.local.json
