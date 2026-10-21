@@ -23,6 +23,14 @@ import subprocess
 import sys
 from pathlib import PurePosixPath
 
+# La consola de Windows (cp1252) no imprime "✔"/"✘" y el script se caería con código 1,
+# bloqueando commits limpios. Forzamos UTF-8 en la salida.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 MAX_MB = 2
 DELIMITED_ROWS_LIMIT = 40  # filas "tipo tabla" tolerables en un archivo de texto
 
