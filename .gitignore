@@ -1,0 +1,115 @@
+# =====================================================================
+#  Data Challenge HUN 2026 — The Outliers
+#  REGLA: en este repo NUNCA van datos del HUN (ni crudos, ni extractos,
+#  ni muestras). Los datos viven en DATA_DIR, una carpeta FUERA del repo.
+#  Este archivo es la primera barrera; el hook pre-commit es la segunda.
+# =====================================================================
+
+# --- Carpetas de datos (por si alguien las crea dentro del repo) -----
+data/
+datos/
+raw/
+extract*/
+extracts/
+dumps/
+exports/
+output/
+outputs/
+tmp/
+
+# --- Formatos de datos tabulares / binarios --------------------------
+*.csv
+*.tsv
+*.txt.gz
+*.parquet
+*.feather
+*.arrow
+*.orc
+*.avro
+*.xlsx
+*.xls
+*.xlsm
+*.ods
+*.json.gz
+*.jsonl
+*.ndjson
+*.h5
+*.hdf5
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.joblib
+*.rds
+*.RData
+*.rda
+*.sav
+*.dta
+*.sas7bdat
+
+# --- Bases de datos y dumps ------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+*.duckdb
+*.duckdb.wal
+*.dump
+*.backup
+*.bak
+*.sql.gz
+*.pgdump
+
+# --- Comprimidos (pueden esconder cualquier cosa) --------------------
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+*.gz
+
+# --- Power BI: los .pbix y la caché de PBIP llevan los datos dentro --
+*.pbix
+*.abf
+**/.pbi/cache.abf
+**/.pbi/localSettings.json
+**/.pbi/cache*
+
+# --- Credenciales / configuración local ------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.ovpn
+*.pgpass
+.pgpass
+secrets/
+credenciales*
+
+# --- DBeaver / pgAdmin (guardan conexiones y a veces contraseñas) ----
+.dbeaver/
+.dbeaver-data-sources*.json
+credentials-config.json
+pgadmin4.db
+
+# --- Jupyter -----------------------------------------------------------
+.ipynb_checkpoints/
+
+# --- Python ----------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# --- Sistema / editores ----------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.log

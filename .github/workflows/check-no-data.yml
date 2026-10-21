@@ -1,0 +1,22 @@
+# Segunda barrera: si alguien se saltó el hook local, esto falla en rojo en GitHub.
+# OJO: si llega a fallar, los datos YA están en GitHub. Hay que avisar al equipo
+# y a los organizadores de inmediato (ver docs/PROTOCOLO_DATOS.md, "Si algo se filtró").
+name: check-no-data
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Revisar que no haya datos ni credenciales
+        run: python scripts/check_no_data.py --all
