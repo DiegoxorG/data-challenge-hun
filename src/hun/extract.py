@@ -23,13 +23,23 @@ from .db import engine
 _INCLUDE = re.compile(r"^[ \t]*--[ \t]*@include[ \t]+(\S+)[ \t]*$", re.M)
 
 
-def read_sql(sql_path: str | Path) -> str:
+def read_sql(sql_path: str | Path, _pila: tuple[Path, ...] = ()) -> str:
     """Lee un .sql y reemplaza las líneas `-- @include archivo.sql` por el contenido
-    de ese archivo (ruta relativa a la misma carpeta). Sirve para reutilizar
-    bloques comunes, como la construcción de episodios."""
-    sql_path = Path(sql_path)
+    de ese archivo. Sirve para reutilizar bloques comunes, como la construcción de
+    episodios. Solo se aceptan archivos .sql de la MISMA carpeta (sin rutas) y se
+    detectan inclusiones circulares."""
+    sql_path = Path(sql_path).resolve()
+    if sql_path in _pila:
+        raise ValueError(f"@include circular: {' -> '.join(p.name for p in (*_pila, sql_path))}")
     texto = sql_path.read_text(encoding="utf-8")
-    return _INCLUDE.sub(lambda m: read_sql(sql_path.parent / m.group(1)).rstrip(), texto)
+
+    def _incluir(m: re.Match) -> str:
+        nombre = m.group(1)
+        if Path(nombre).name != nombre or not nombre.endswith(".sql"):
+            raise ValueError(f"@include solo acepta un .sql de la misma carpeta, sin rutas: {nombre!r}")
+        return read_sql(sql_path.parent / nombre, (*_pila, sql_path)).rstrip()
+
+    return _INCLUDE.sub(_incluir, texto)
 
 
 def run_sql_file(sql_path: str | Path, nombre: str | None = None) -> Path:

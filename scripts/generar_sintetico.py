@@ -7,7 +7,7 @@ Sirve para:
   - compartir ejemplos con IA o en el repo sin riesgo,
   - tests reproducibles.
 
-Uso (PostgreSQL local, NUNCA el del HUN):
+Uso (PostgreSQL local, NUNCA el del HUN; la URL debe traer host y base explícitos):
   python scripts/generar_sintetico.py --url postgresql://usuario@localhost:5432/omop_sintetico
   python scripts/generar_sintetico.py --url ... --pacientes 5000 --semilla 7
 
@@ -24,8 +24,10 @@ Patrones que imita:
 from __future__ import annotations
 
 import argparse
+import ipaddress
+import os
 from datetime import datetime, timedelta
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import numpy as np
 import psycopg2
@@ -46,6 +48,8 @@ DDL = """
 DROP SCHEMA IF EXISTS uninorte_omop CASCADE;
 CREATE SCHEMA uninorte_omop;
 SET search_path = uninorte_omop;
+CREATE TABLE _es_sintetico (creado timestamp DEFAULT now());   -- marca: este esquema es inventado
+INSERT INTO _es_sintetico DEFAULT VALUES;
 CREATE TABLE concept (concept_id int, concept_name text, domain_id text, vocabulary_id text);
 CREATE TABLE person (person_id int, gender_concept_id int, year_of_birth int,
                      race_concept_id int, ethnicity_concept_id int);
@@ -55,6 +59,58 @@ CREATE TABLE visit_detail (visit_detail_id int, visit_occurrence_id int, visit_d
                      visit_detail_start_datetime timestamp, visit_detail_end_datetime timestamp,
                      provider_id int);
 """
+
+# --- Protecciones: este script BORRA y recrea el esquema uninorte_omop. -------------------
+# Tres capas independientes para que nunca pueda tocar la base del HUN:
+#   1. La URL debe traer host explícito local y no puede redirigir con ?host= / ?service=.
+#   2. Se borran del entorno PGHOST & cía. y, ya conectado, se confirma que el servidor es local.
+#   3. Solo se borra un esquema uninorte_omop que tenga la marca _es_sintetico (creada por este
+#      script). Si existe uno SIN marca, podría ser real: se aborta.
+_HOSTS_LOCALES = {"localhost", "127.0.0.1", "::1"}
+_VARS_PELIGROSAS = ("PGHOST", "PGHOSTADDR", "PGSERVICE", "PGSERVICEFILE", "PGDATABASE")
+_PARAMS_PROHIBIDOS = {"host", "hostaddr", "service", "dbname", "options"}
+
+
+def _abortar(motivo: str) -> None:
+    raise SystemExit(f"ABORTADO por seguridad: {motivo}\n"
+                     "Este script solo escribe en un PostgreSQL LOCAL de pruebas, nunca en la base del HUN.")
+
+
+def _validar_url(url: str) -> None:
+    u = urlparse(url)
+    if u.scheme not in {"postgresql", "postgres"}:
+        _abortar("la URL debe empezar por postgresql://")
+    if "," in u.netloc:
+        _abortar("la URL no puede traer varios hosts")
+    if not u.hostname:
+        _abortar("la URL debe traer el host explícito (p. ej. postgresql://yo@localhost:5432/omop_sintetico)")
+    if u.hostname.lower() not in _HOSTS_LOCALES:
+        _abortar(f"el host '{u.hostname}' no es local")
+    if not u.path.strip("/"):
+        _abortar("la URL debe traer el nombre de la base (…/omop_sintetico)")
+    prohibidos = _PARAMS_PROHIBIDOS & {k.lower() for k in parse_qs(u.query)}
+    if prohibidos:
+        _abortar(f"la URL no puede traer los parámetros {sorted(prohibidos)}")
+
+
+def _verificar_servidor_local(cur) -> None:
+    cur.execute("SELECT host(inet_server_addr())")
+    addr = cur.fetchone()[0]                 # None = socket local de Unix
+    if addr is not None:
+        ip = ipaddress.ip_address(addr)
+        if ip.version == 6 and ip.ipv4_mapped:           # ::ffff:127.0.0.1 -> 127.0.0.1
+            ip = ip.ipv4_mapped
+        if not ip.is_loopback:
+            _abortar(f"el servidor conectado no es local ({addr})")
+
+
+def _verificar_esquema_es_sintetico(cur) -> None:
+    cur.execute("SELECT to_regnamespace('uninorte_omop') IS NOT NULL, "
+                "to_regclass('uninorte_omop._es_sintetico') IS NOT NULL")
+    existe, marcado = cur.fetchone()
+    if existe and not marcado:
+        _abortar("ya existe un esquema uninorte_omop SIN la marca de sintético; podría ser real")
+
 
 # Perfil de llegadas por hora (inventado): pico de mañana y de tarde-noche
 _PERFIL_HORA = np.array([2, 1.5, 1, 1, 1, 1.5, 3, 5, 7, 8, 8, 7,
@@ -147,13 +203,14 @@ def main() -> None:
     ap.add_argument("--dias", type=int, default=365)
     a = ap.parse_args()
 
-    host = (urlparse(a.url).hostname or "localhost").lower()
-    if host not in {"localhost", "127.0.0.1", "::1"}:
-        raise SystemExit(f"Por seguridad solo escribo en un PostgreSQL local (host={host}). "
-                         "Esto NUNCA debe apuntar a la base del HUN.")
+    _validar_url(a.url)
+    for var in _VARS_PELIGROSAS:          # que libpq no tome el host/servicio del entorno
+        os.environ.pop(var, None)
 
     personas, visitas, detalles = generar(a.pacientes, a.semilla, datetime(2023, 1, 2), a.dias)
     with psycopg2.connect(a.url) as con, con.cursor() as cur:
+        _verificar_servidor_local(cur)
+        _verificar_esquema_es_sintetico(cur)
         cur.execute(DDL)
         execute_values(cur, "INSERT INTO concept VALUES %s", CONCEPTOS)
         execute_values(cur, "INSERT INTO person VALUES %s", personas)

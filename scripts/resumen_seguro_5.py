@@ -92,7 +92,7 @@ for nombre, df in [("original (23)", crudo), ("ajustada (25)", aj)]:
     df = df.copy()
     df["hora"] = pd.to_datetime(df["hora"])
     df = df[df["hora"] >= df["hora"].min() + pd.Timedelta(days=30)]
-    df = df[df["hora"] < pd.Timestamp("2026-05-01")]          # meses finales incompletos
+    df = df[df["hora"] < df["hora"].max() - pd.Timedelta(days=60)]   # últimos meses suelen venir incompletos
     print(f"  - {nombre}")
     print(f"      urgencias típica vs {CAPACIDAD_URGENCIAS} cubículos: {veces(df['en_urgencias'].median(), CAPACIDAD_URGENCIAS)} la capacidad"
           f" | horas por encima: {cuanto((df['en_urgencias'] > CAPACIDAD_URGENCIAS).mean())}")
