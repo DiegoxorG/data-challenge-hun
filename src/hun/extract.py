@@ -9,6 +9,7 @@ El resultado queda en DATA_DIR/<nombre>.parquet. Nunca dentro del repo.
 from __future__ import annotations
 
 import argparse
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -19,9 +20,21 @@ from . import config
 from .db import engine
 
 
+_INCLUDE = re.compile(r"^[ \t]*--[ \t]*@include[ \t]+(\S+)[ \t]*$", re.M)
+
+
+def read_sql(sql_path: str | Path) -> str:
+    """Lee un .sql y reemplaza las líneas `-- @include archivo.sql` por el contenido
+    de ese archivo (ruta relativa a la misma carpeta). Sirve para reutilizar
+    bloques comunes, como la construcción de episodios."""
+    sql_path = Path(sql_path)
+    texto = sql_path.read_text(encoding="utf-8")
+    return _INCLUDE.sub(lambda m: read_sql(sql_path.parent / m.group(1)).rstrip(), texto)
+
+
 def run_sql_file(sql_path: str | Path, nombre: str | None = None) -> Path:
     sql_path = Path(sql_path)
-    query = sql_path.read_text(encoding="utf-8")
+    query = read_sql(sql_path)
     out_dir = config.data_dir()  # valida que esté fuera del repo y de la nube
     nombre = nombre or sql_path.stem
     out = out_dir / f"{nombre}.parquet"
