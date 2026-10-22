@@ -1,0 +1,119 @@
+# CLAUDE.md — Data Challenge HUN 2026 · equipo The Outliers
+
+Contexto para cualquier sesión de Claude (Claude Code o chat) que trabaje en este repo. Léelo completo antes de hacer nada.
+
+Equipo: Diego, Sebastián y Joseph (Uninorte, Ciencia de Datos). Comunicación en español, casual y directa, sin preámbulos ni disclaimers innecesarios. Explica el porqué de las cosas, no solo el resultado.
+
+---
+
+## 0. Reglas de confidencialidad (no negociables)
+
+Trabajamos con datos reales de pacientes del Hospital Universidad del Norte (HUN) bajo un acuerdo de confidencialidad. **Subir datos del HUN a una IA, a la nube o a terceros es causal de descalificación.** Por eso:
+
+- **NO leas, abras, busques ni imprimas**: `.env`, la carpeta de datos (`DATA_DIR`, normalmente `C:\hun_data`), archivos `.parquet/.csv/.xlsx/.pbix`, ni la carpeta de DBeaver en AppData. `.claude/settings.json` lo bloquea, pero no dependas solo de eso.
+- **NO ejecutes nada que se conecte a la base o cargue extractos**: `python -m hun.extract`, `scripts/resumen_seguro*.py`, `hun.db.ping`, notebooks con datos. Eso lo corre la persona; tú escribes el código.
+- **Lo único que puedes recibir del usuario**: el esquema (tablas, columnas, tipos), nombres e IDs de conceptos OMOP, mensajes de error (revisando que no traigan valores) y la salida de los scripts `scripts/resumen_seguro*.py`, que traducen resultados a palabras ("pocos", "la mayoría") y franjas ("1-4 h"). **Nunca pidas conteos, filas, fechas de pacientes ni textos libres**, y si el usuario los pega, avísale y no los repitas.
+- Nunca escribas cifras de los datos en archivos del repo (ni en docs, comentarios o commits). Los hallazgos van en palabras.
+- Credenciales: solo en `.env` (ignorado por git). Nunca en código, notebooks, chats ni commits.
+- Para probar código usa **datos sintéticos** (`scripts/generar_sintetico.py` en un PostgreSQL local), nunca la base real.
+- Si algo parece una fuga (datos o credenciales en un archivo, en la terminal o en git), detente y avisa. Una exposición accidental se reporta a los organizadores.
+
+## 1. El reto
+
+- Problema: urgencias del HUN congestionada. Quieren trazabilidad del paciente, entender dónde se acumula la espera y **recomendaciones concretas para reducir tiempos**.
+- Entrega: **20 nov 2026** (documento + repo GitHub sin datos + dashboard Power BI + presentación). Sustentación: 30 nov.
+- Evaluación: optimización y propuestas de mejora 20 % · modelo analítico/predictivo 20 % · comprensión del problema y flujo 15 % · calidad y preparación de datos 15 % · dashboard 15 % · presentación 10 % · ingeniería de software/reproducibilidad 5 %. Desempate: optimización, luego modelo.
+- Los jurados no tienen acceso a la base: el repo debe poder ejecutarse con los datos sintéticos.
+
+## 2. Entorno
+
+- Windows + PowerShell + VS Code. Python 3.11 en `.venv` (`.venv\Scripts\activate`).
+- Base: PostgreSQL 18 del HUN, esquema `uninorte_omop`, accesible solo con la VPN del HUN (FortiClient; usuario de VPN compartido por el equipo, usuario de BD individual por persona).
+- `.env` (copiado de `.env.example`): `PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD, PGSCHEMA, DATA_DIR`. `DATA_DIR` debe estar fuera del repo y fuera de OneDrive; `src/hun/config.py` se niega a correr si no.
+- Setup de cada clon: `powershell -ExecutionPolicy Bypass -File scripts\setup.ps1` (activa el hook anti-fuga y crea `.env`), luego `pip install -r requirements.txt` y `pip install -e .`.
+
+## 3. Estructura del repo
+
+```
+.githooks/pre-commit        hook anti-fuga (llama a scripts/check_no_data.py --staged)
+.github/workflows/          misma revisión en GitHub Actions
+.claude/settings.json       reglas deny para Claude Code (.env, datos, --no-verify, --force)
+docs/                       PROTOCOLO_DATOS.md, METODOLOGIA_EPISODIOS.md
+sql/00_exploracion/         consultas de exploración (00-18)
+sql/01_episodios/           _episodios.sql (bloque común) + consultas 20-25
+src/hun/                    config.py (.env + DATA_DIR validada), db.py (conexión), extract.py
+scripts/                    check_no_data.py, setup.*, resumen_seguro*.py, generar_sintetico.py
+notebooks/                  análisis, SIEMPRE sin outputs
+dashboard/                  Power BI como .pbit o PBIP, nunca .pbix
+```
+
+- `python -m hun.extract sql\...\archivo.sql` corre una consulta y guarda el resultado en `DATA_DIR/<nombre>.parquet`; en consola solo imprime filas y columnas. `hun.extract.load("<nombre>")` lo carga.
+- `extract.py` envuelve la consulta en `sqlalchemy.text()` (los `%` de `ILIKE` no rompen psycopg2) y soporta `-- @include archivo.sql` para reutilizar bloques. Las consultas con `@include` no corren tal cual en DBeaver: hay que pegar el bloque incluido.
+- Patrón para compartir resultados con Claude: por cada lote de consultas hay un `scripts/resumen_seguro_N.py` que lee los extractos y los imprime en palabras/franjas. Al crear consultas nuevas, crea también su resumen seguro.
+
+## 4. Esquema real (7 tablas; no hay death, drug_exposure, observation, provider, etc.)
+
+- `concept(concept_id, concept_name, domain_id, vocabulary_id)` — trae el vocabulario OMOP completo (que un concepto exista aquí no significa que se use).
+- `person(person_id, gender_concept_id, year_of_birth, race_concept_id, ethnicity_concept_id)`
+- `visit_occurrence(visit_occurrence_id, person_id, visit_concept_id, visit_start_datetime, visit_end_datetime, provider_id)`
+- `visit_detail(visit_detail_id, visit_occurrence_id, visit_detail_concept_id, visit_detail_start_datetime, visit_detail_end_datetime, provider_id)` — sin person_id; se une por visit_occurrence_id.
+- `condition_occurrence(..., condition_concept_id, condition_start_datetime, condition_type_concept_id)`
+- `procedure_occurrence(..., procedure_concept_id, procedure_date)` — **solo fecha, sin hora**.
+- `measurement(..., measurement_concept_id, measurement_datetime, value_as_number, measurement_source_value_extended)` — casi todo laboratorio (hemograma, electrolitos, creatinina, coagulación, gases, PCR, lactato). El texto libre puede ser sensible: nunca compartir valores.
+
+## 5. Cómo registra el HUN el flujo (confirmado con datos, en palabras)
+
+Conceptos usados en `visit_occurrence` y `visit_detail`:
+
+```
+Llegada/registro            Atención en urgencias            Hospitalización
+9203 Emergency Room Visit → 3045729 Treatment urgency    →   9201 Inpatient Visit
+dura 0 o <15 min            típico 1-4 h, cola larga         típico 1-7 días
+(marca, no estancia)        (varios segmentos seguidos)
+```
+
+- **3045729 "Treatment urgency"** en OMOP estándar es un concepto de observación, pero el HUN lo usa como tipo de visita/segmento: es la **estancia real en urgencias**. Filtrar urgencias solo por 9203 pierde casi toda la atención.
+- **581479 "Ambulatory Rehabilitation Visit"**: siempre dura 0; eventos ambulatorios puntuales (probable consulta externa), fuera del flujo de urgencias.
+- `visit_occurrence` casi siempre tiene inicio = fin → **no sirve para duraciones**. Las duraciones salen de `visit_detail`.
+- **Una visit_occurrence NO es un episodio**: agrupa segmentos separados por días. Hay que reconstruir episodios.
+- Las horas son reales (casi ninguna en 00:00) → el análisis por hora es viable.
+- **No existe nivel de triaje (I-V)** ni etapas internas (triaje/admisión/consulta). "Triage level" está en el vocabulario pero no se usa. Es una limitación a declarar.
+
+## 6. Episodios (`sql/01_episodios/_episodios.sql`, ver `docs/METODOLOGIA_EPISODIOS.md`)
+
+- Por paciente, se unen segmentos 9203/3045729/9201 solapados o con hueco ≤ 60 min (gaps and islands). `ep` = todos los episodios; `epu` = los que empiezan en urgencias, con `destino` (alta/hospitalizado), `min_urg`, `min_hosp`.
+- Resultados en palabras:
+  - Casi todos los episodios de urgencias terminan en alta; se hospitalizan pocos.
+  - **Hallazgo principal: los hospitalizados pasan más de 3 veces más tiempo en urgencias que los de alta** (la espera de cama queda dentro del tiempo en urgencias). Es la pista para las recomendaciones: el cuello de botella parece ser el acceso a cama, no la atención.
+  - Episodios de alta: distribución bimodal; la mayoría dura menos de 15 min (¿registro/remisión de triaje IV-V a EPS? por confirmar).
+  - Serie de llegadas por hora: continua, sin días vacíos, patrón diario fuerte (hora pico > 3 veces la más tranquila), semanal moderado. **Los últimos meses disponibles (2026) están incompletos: excluirlos de modelos.**
+  - El tiempo en urgencias varía 1.5-3 veces según la hora de llegada.
+- Diagnóstico de ocupación (consultas 23-25):
+  - La ocupación calculada supera muchas veces la capacidad de referencia (58 cubículos de urgencias, 64 camas, tomadas de la visita de campo). Censo estable entre años (sin deriva).
+  - Causas encontradas: en bastantes hospitalizados el registro de urgencias sigue abierto días después del ingreso (doble conteo; 25 lo corrige cortando urgencias al ingreso); pocos episodios de más de 7 días aportan muchas horas-paciente.
+  - Aun ajustada, hospitalización sigue muy por encima de 64 camas → la capacidad de referencia no cubre todo lo que hay en los datos. **La ocupación absoluta NO es confiable todavía; los patrones relativos sí.**
+  - Cuando una hospitalización llega después de una urgencia con hueco (< 48 h), el hueco típico es de 12-24 h → posible espera de cama no registrada; el umbral de 60 min separa flujos reales.
+
+## 7. Decisiones abiertas (las toma el equipo, no Claude)
+
+1. Umbral de episodio: ¿unir urgencia → hospitalización aunque haya horas de hueco (24-48 h)?
+2. Tratamiento de contactos < 15 min y de la cola larga (> 7 días).
+3. Capacidades reales a usar.
+4. Reparto del trabajo: pronóstico (llegadas/ocupación por hora), simulación de escenarios (p. ej. agilizar ingreso a cama, reforzar franjas pico), dashboard Power BI, documento y presentación.
+
+Preguntas enviadas/por enviar a los organizadores: acceso por VPN desde equipos propios, descarga de extractos, OneDrive institucional, Power BI directo a la BD, uso simultáneo de la VPN, uso de IA con agregados, significado de 9203/3045729/581479 y si existe triaje, capacidad real y sedes cubiertas, qué son los contactos < 15 min. **Mientras no respondan: trabajar con agregados, sin descargar datos por paciente.**
+
+## 8. Contexto de la visita de campo (1 oct)
+
+- Por ley se atienden triaje I, II y III (Res. 5596/2015); IV y V se remiten a la EPS.
+- Flujo observado: turno → triaje → sala de espera → admisiones (verifican EPS) → consultorio → alta u observación → hospitalización/UCI/cirugía/exámenes. En congestión se habilitan consultorios y se atiende en silla.
+- Hay demoras "naturales" (labs remitidos fuera) que no son ineficiencia.
+- Capacidad mencionada: 58 cubículos de urgencias, 4 de reanimación, 3 quirófanos, 64 camas de hospitalización (pisos 1 y 2). Tres sedes.
+- Análisis sugeridos por el HUN: Sankey de trayectorias, cascada de esperas, boxplots de estancia por servicio, heatmap día × hora, series de tiempo por hora/día.
+
+## 9. Forma de trabajar
+
+- Claude escribe SQL/código y lo prueba con datos sintéticos; la persona lo corre contra la base real y comparte solo el resumen seguro.
+- Commits: la persona decide. Claude Code agrega archivos uno por uno (nunca `git add -A`), corre `python scripts/check_no_data.py --all`, muestra un resumen y **espera confirmación antes del push**. Nunca `--no-verify` ni `--force`.
+- Notebooks sin outputs (`nbstripout --install` o `jupyter nbconvert --clear-output --inplace`).
+- Power BI: nunca subir `.pbix` (lleva los datos); usar `.pbit` o PBIP sin caché.
