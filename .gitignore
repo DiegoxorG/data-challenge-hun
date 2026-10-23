@@ -116,3 +116,6 @@ desktop.ini
 
 # --- Claude Code ------------------------------------------------------
 .claude/settings.local.json
+
+# --- Salidas de Cuellos_botella (van en DATA_DIR; esto es por si acaso) ----
+cuellos_botella_salidas/

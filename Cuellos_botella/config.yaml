@@ -1,0 +1,42 @@
+# Configuración de la herramienta de cuellos de botella.
+# Solo nombra columnas y parámetros; las zonas se descubren de los datos.
+# Este ejemplo usa la forma de visit_detail aplanada con person y visit_occurrence.
+
+columnas:
+  persona: person_id                         # obligatoria
+  zona: visit_detail_concept_id              # obligatoria
+  inicio: visit_detail_start_datetime        # obligatoria
+  fin: visit_detail_end_datetime             # obligatoria
+  etiqueta_zona: concept_name                # opcional: nombre legible de la zona
+  caso: null                                 # opcional: si se indica, define el episodio en vez del umbral
+  atributos:                                 # opcional: lista de columnas para la sección H
+    - {columna: gender_concept_id, tipo: categorica}
+    - {columna: edad, tipo: numerica, bins: [0, 5, 18, 30, 45, 60, 75, 130]}
+
+# Si se indica, crea la columna 'edad' = año del inicio del segmento − año de nacimiento
+edad_desde_anio_nacimiento: year_of_birth
+
+episodios:
+  umbral_min: 60                 # hueco máximo entre segmentos de la misma persona para seguir en el episodio
+  recortar_al_siguiente: false   # true: si una estancia sigue abierta al empezar la siguiente, se corta ahí
+
+zonas_excluir: []                # códigos de zona (tal como vienen en la columna 'zona')
+
+capacidades: {}                  # {codigo_zona: capacidad}; solo dibuja una línea de referencia
+
+rango_fechas:
+  desde: null                    # p. ej. "AAAA-MM-DD" (incluido)
+  hasta: null                    # p. ej. "AAAA-MM-DD" (excluido)
+
+parametros:
+  ventana_carga_h: 3             # ventana de "entradas recientes" (F)
+  top_n_categorias: 8            # categorías mostradas por atributo; el resto va a "otros" (H)
+  tamano_min_grupo: 30           # grupos más pequeños se agrupan en "otros" (H)
+  cuantiles_censo: 5             # número de cuantiles de censo y carga (F)
+  mes_incompleto_frac: 0.5       # un mes con menos filas que esta fracción de la mediana se marca incompleto
+  mes_cobertura_min: 0.9         # primer/último mes: fracción mínima del mes cubierta por el rango de datos
+  ventana_reconsulta_h: 48       # hueco máximo entre episodios para la vista de reconsultas (E)
+  pasos_sankey: 4                # estancias mostradas en el Sankey
+  max_zonas_solape: 40           # zonas más frecuentes revisadas en solapes entre zonas (A)
+  minutos_bin_perfil: 60         # granularidad de los perfiles del día: 60, 30 o 15
+  muestra_carriles: 0            # >0 dibuja carriles de esa cantidad de episodios al azar (nivel individuo, solo local)
