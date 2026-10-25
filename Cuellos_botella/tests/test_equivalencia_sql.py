@@ -24,7 +24,6 @@ la marca _es_sintetico, así que no puede tocar la base del HUN.
 from __future__ import annotations
 
 import dataclasses
-import importlib.util
 import os
 from pathlib import Path
 
@@ -39,29 +38,6 @@ from Cuellos_botella.config import cargar
 REPO = Path(__file__).resolve().parents[2]
 URL = os.getenv("HUN_TEST_PG_URL")
 pytestmark = pytest.mark.skipif(not URL, reason="sin HUN_TEST_PG_URL (PostgreSQL local sintético)")
-
-
-def _generador():
-    spec = importlib.util.spec_from_file_location("generar_sintetico", REPO / "scripts" / "generar_sintetico.py")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-@pytest.fixture(scope="module")
-def eng():
-    from sqlalchemy import create_engine
-    gen = _generador()
-    gen._validar_url(URL)                               # host local explícito, sin trucos en la URL
-    url = "postgresql+psycopg2://" + URL.split("://", 1)[1]
-    e = create_engine(url, connect_args={"options": "-csearch_path=uninorte_omop"})
-    with e.connect() as c:
-        cur = c.connection.cursor()
-        gen._verificar_servidor_local(cur)
-        cur.execute("SELECT to_regclass('uninorte_omop._es_sintetico') IS NOT NULL")
-        if not cur.fetchone()[0]:
-            pytest.fail("el esquema uninorte_omop no tiene la marca _es_sintetico: no es la base sintética")
-    return e
 
 
 def _sql(eng, archivo: Path, final: str = "") -> pd.DataFrame:

@@ -1,4 +1,4 @@
-"""Resumen seguro (parte 2): rutas, triaje, calidad de tiempos y segmentos.
+"""Resumen seguro (parte 2): triaje, calidad de tiempos y segmentos.
 
 Solo nombres de conceptos y proporciones en palabras (ninguno / pocos /
 la mayoría...). Sin conteos. Se puede compartir fuera del equipo.
@@ -7,39 +7,8 @@ Uso:  python scripts/resumen_seguro_2.py
 """
 from __future__ import annotations
 
-import pandas as pd
+from hun.palabras import cuanto, extracto as _try
 
-from hun.extract import load
-
-
-def _try(nombre: str) -> pd.DataFrame | None:
-    try:
-        return load(nombre)
-    except FileNotFoundError:
-        print(f"  (no encontré {nombre}; córrelo con hun.extract)")
-        return None
-
-
-def cuanto(p: float) -> str:
-    """Proporción en palabras, sin cifras exactas."""
-    if pd.isna(p) or p == 0:
-        return "ninguno"
-    if p < 0.01:
-        return "casi ninguno"
-    if p < 0.10:
-        return "pocos"
-    if p < 0.50:
-        return "bastantes"
-    if p < 0.90:
-        return "la mayoría"
-    return "casi todos"
-
-
-print("\n== 05 · Rutas más frecuentes (orden de mayor a menor, sin conteos) ==")
-df = _try("05_trayectorias")
-if df is not None:
-    for i, ruta in enumerate(df["ruta"].head(15), 1):
-        print(f"  {i:>2}. {ruta}")
 
 print("\n== 11 · ¿Se usan los conceptos de triaje en los datos? ==")
 df = _try("11_uso_conceptos_triaje")

@@ -25,8 +25,6 @@ CARPETA_DEFECTO = "series_tiempo"
 CONTEOS = ["llegadas", "llegadas_hospitalizan", "llegadas_contacto_breve", "ingresos_cama",
            "ingresos_desde_urgencias", "altas_cama"]
 CENSOS = ["censo_urgencias", "censo_hospitalizacion"]
-_SYNCED = ("onedrive", "google drive", "googledrive", "my drive", "mi unidad",
-           "icloud", "dropbox", "mobile documents", "box sync", "mega")
 
 
 @dataclass
@@ -37,13 +35,11 @@ class Series:
     semanas: pd.DataFrame               # semana, destino, percentiles de tiempos (grupos >= 10)
     meses_incompletos: set              # pd.Period mensuales
 
-    def como_dict(self) -> dict:
-        return {"horas": self.horas, "dias": self.dias, "grupos": self.grupos, "semanas": self.semanas}
-
 
 # --- dónde se guarda ---------------------------------------------------------------
 def carpeta_salida(ruta: str | Path | None) -> Path:
     """Por defecto DATA_DIR/series_tiempo. Nunca dentro del repo ni en una carpeta en la nube."""
+    from hun.config import validar_carpeta
     if ruta is None:
         try:
             from hun.config import data_dir
@@ -51,11 +47,8 @@ def carpeta_salida(ruta: str | Path | None) -> Path:
             raise RuntimeError("No pude obtener DATA_DIR (¿pip install -e . y .env lleno?). Usa --salida.") from e
         d = data_dir() / CARPETA_DEFECTO
     else:
-        d = Path(ruta).expanduser().resolve()
-    if d == REPO_ROOT or REPO_ROOT in d.parents:
-        raise RuntimeError(f"La salida ({d}) está DENTRO del repo. Usa una carpeta fuera, p. ej. DATA_DIR.")
-    if any(s in str(d).lower() for s in _SYNCED):
-        raise RuntimeError(f"La salida ({d}) parece estar en una carpeta sincronizada a la nube.")
+        d = Path(ruta)
+    d = validar_carpeta(d, "La salida")
     (d / "datos").mkdir(parents=True, exist_ok=True)
     return d
 

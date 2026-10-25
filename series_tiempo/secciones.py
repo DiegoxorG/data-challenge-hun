@@ -16,7 +16,7 @@ from .reporte import Registro
 HORAS = [f"{h:02d}h" for h in range(24)]
 DIAS = F.DIAS
 MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
-C1, C2, C3, C4 = F.SERIES[0], F.SERIES[1], F.SERIES[2], F.SERIES[3]
+C1, C2 = F.SERIES[0], F.SERIES[1]
 
 
 # --- utilidades ------------------------------------------------------------------------

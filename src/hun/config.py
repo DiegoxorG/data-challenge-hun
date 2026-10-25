@@ -25,16 +25,22 @@ def _require(name: str) -> str:
     return val
 
 
-def data_dir() -> Path:
-    """Carpeta local de extractos, validada contra fugas."""
-    d = Path(_require("DATA_DIR")).expanduser().resolve()
+def validar_carpeta(ruta: str | Path, que: str = "La carpeta") -> Path:
+    """Devuelve la carpeta (creada) si está fuera del repo y fuera de carpetas sincronizadas a
+    la nube; si no, se detiene antes de escribir nada. La usan DATA_DIR y las herramientas."""
+    d = Path(ruta).expanduser().resolve()
     if d == REPO_ROOT or REPO_ROOT in d.parents:
-        raise RuntimeError(f"DATA_DIR ({d}) está DENTRO del repo. Muévela fuera, p. ej. C:\\hun_data")
+        raise RuntimeError(f"{que} ({d}) está DENTRO del repo. Usa una carpeta fuera, p. ej. C:\\hun_data")
     if any(s in str(d).lower() for s in _SYNCED):
-        raise RuntimeError(f"DATA_DIR ({d}) parece estar en una carpeta sincronizada a la nube. "
+        raise RuntimeError(f"{que} ({d}) parece estar en una carpeta sincronizada a la nube. "
                            "Usa una carpeta local, p. ej. C:\\hun_data")
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def data_dir() -> Path:
+    """Carpeta local de extractos, validada contra fugas."""
+    return validar_carpeta(_require("DATA_DIR"), "DATA_DIR")
 
 
 def pg_params() -> dict:

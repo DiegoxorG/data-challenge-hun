@@ -1,6 +1,6 @@
 """Resumen de la exploración SIN números ni datos de pacientes.
 
-Lee los extractos 02, 04, 08, 09 y 10 de DATA_DIR e imprime solo nombres
+Lee los extractos 02, 08, 09 y 10 de DATA_DIR e imprime solo nombres
 de conceptos, IDs del vocabulario y banderas sí/no. Es lo único que se
 puede compartir fuera del equipo (p. ej. con Claude).
 
@@ -10,15 +10,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from hun.extract import load
-
-
-def _try(nombre: str) -> pd.DataFrame | None:
-    try:
-        return load(nombre)
-    except FileNotFoundError:
-        print(f"  (no encontré {nombre}; córrelo con hun.extract)")
-        return None
+from hun.palabras import extracto as _try
 
 
 def _nombres(df: pd.DataFrame, max_n: int = 30) -> None:
@@ -34,14 +26,6 @@ if df is not None:
     _nombres(df[df["nivel"] == "visit"])
     print("\n== 02 · Etapas (visit_detail) ==")
     _nombres(df[df["nivel"] == "detail"])
-
-print("\n== 04 · Calidad por etapa (sí/no) ==")
-df = _try("04_duracion_por_etapa")
-if df is not None:
-    for _, r in df.iterrows():
-        sin_fin = "sí" if r["sin_fin"] > 0 else "no"
-        neg = "sí" if r["fin_antes_inicio"] > 0 else "no"
-        print(f"  - {r['etapa']}: registros sin fecha fin={sin_fin} | fin antes de inicio={neg}")
 
 print("\n== 08 · Conceptos que suenan a triaje ==")
 df = _try("08_conceptos_triaje")

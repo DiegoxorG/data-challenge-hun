@@ -10,9 +10,6 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CARPETA_SALIDA_DEFECTO = "cuellos_botella_salidas"
 
-# Mismo criterio que src/hun/config.py: nada de carpetas sincronizadas a la nube
-_SYNCED = ("onedrive", "google drive", "googledrive", "my drive", "mi unidad",
-           "icloud", "dropbox", "mobile documents", "box sync", "mega")
 
 
 @dataclass
@@ -140,7 +137,8 @@ def cargar(ruta: str | Path) -> Config:
 
 def validar_salida(ruta: str | Path | None) -> Path:
     """Devuelve la carpeta de salida. Por defecto DATA_DIR/cuellos_botella_salidas;
-    nunca dentro del repo ni en una carpeta sincronizada a la nube."""
+    nunca dentro del repo ni en una carpeta sincronizada a la nube (hun.config.validar_carpeta)."""
+    from hun.config import validar_carpeta
     if ruta is None:
         try:
             from hun.config import data_dir  # lee DATA_DIR del .env del usuario
@@ -149,10 +147,5 @@ def validar_salida(ruta: str | Path | None) -> Path:
                                "Indica la salida con --salida.") from e
         d = data_dir() / CARPETA_SALIDA_DEFECTO
     else:
-        d = Path(ruta).expanduser().resolve()
-    if d == REPO_ROOT or REPO_ROOT in d.parents:
-        raise RuntimeError(f"La salida ({d}) está DENTRO del repo. Usa una carpeta fuera, p. ej. DATA_DIR.")
-    if any(s in str(d).lower() for s in _SYNCED):
-        raise RuntimeError(f"La salida ({d}) parece estar en una carpeta sincronizada a la nube.")
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+        d = Path(ruta)
+    return validar_carpeta(d, "La salida")
