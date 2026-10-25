@@ -162,8 +162,8 @@ def main(argv: list[str] | None = None) -> int:
     lb = t("ljung_box_resto")
     if lb is not None:
         queda = (lb["p_valor"] < 0.05).any()
-        print("  después de quitar tendencia y ciclo semanal " + ("todavía queda autocorrelación (hay información "
-              "para un modelo ARMA)" if queda else "el resto ya parece ruido"))
+        print("  después de quitar tendencia y ciclo semanal " + ("todavía queda autocorrelación" if queda
+                                                                   else "el resto ya parece ruido"))
 
     print("\n== I · Estacionariedad (ADF + KPSS, serie diaria) ==")
     e = t("pruebas_estacionariedad")
@@ -181,9 +181,8 @@ def main(argv: list[str] | None = None) -> int:
     di = t("dispersion")
     if di is not None and (di["indicador"] == "lambda de Box-Cox de las llegadas diarias").any():
         lam = float(di.loc[di["indicador"] == "lambda de Box-Cox de las llegadas diarias", "valor"].iloc[0])
-        print("  transformación sugerida para la serie diaria: " + ("ninguna (lambda cerca de 1)" if lam > 0.75 else
-              "raíz (lambda cerca de 0.5)" if lam > 0.25 else "logaritmo (lambda cerca de 0)" if lam > -0.25 else
-              "otra (lambda negativo: revisar)"))
+        print("  lambda de Box-Cox de la serie diaria: " + ("cerca de 1" if lam > 0.75 else "cerca de 0.5"
+              if lam > 0.25 else "cerca de 0" if lam > -0.25 else "negativo"))
 
     print("\n== K · Otras series del flujo ==")
     cc = t("correlacion_cruzada")

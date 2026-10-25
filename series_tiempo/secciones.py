@@ -84,9 +84,7 @@ def cobertura(s: Series, reg: Registro) -> None:
             "Episodios que empiezan en urgencias, contados por día de llegada, con medias móviles de 7 y 28 días."
             + _incompletos_txt(s),
             "La línea gris es el dato crudo; la de 7 días quita el patrón semanal y la de 28 deja ver el nivel. "
-            "Usa la barra de abajo para hacer zoom en un periodo.",
-            "Define el periodo de entrenamiento: solo días completos. Saltos bruscos del nivel serían cambios "
-            "estructurales (nuevo sistema, cierre de un servicio) que el modelo tendría que tratar aparte.")
+            "Usa la barra de abajo para hacer zoom en un periodo.")
 
 
 # --- B. Nivel y tendencia ---------------------------------------------------------------
@@ -102,9 +100,7 @@ def tendencia(s: Series, reg: Registro) -> None:
     reg.fig(sec, "Año sobre año: llegadas por día según el mes", F.estilo(fig, None, "llegadas promedio por día"),
             "Promedio de llegadas por día en cada mes, una línea por año (solo días completos).",
             "Si las líneas se mueven juntas, hay estacionalidad anual; si una queda por encima de otra en todos "
-            "los meses, hay tendencia. Con menos de dos años completos, separar las dos cosas no es confiable.",
-            "Estacionalidad anual clara → término anual (Fourier anual, mes como dummy, o periodo 365 en "
-            "MSTL/Prophet). Tendencia → componente de tendencia o diferenciación.")
+            "los meses, hay tendencia. Con menos de dos años completos, separar las dos cosas no es confiable.")
 
     c = dias_continuos(s)
     filas = []
@@ -145,9 +141,7 @@ def dentro_del_dia(s: Series, reg: Registro) -> None:
             "Promedio de llegadas en cada hora del día y la banda donde cae el 80 % de las horas.",
             f"La hora pico es {HORAS[pico]} y la más tranquila {HORAS[valle]}; la pico tiene "
             f"{p['media'][pico] / max(p['media'][valle], 1e-9):.1f} veces más llegadas. Una banda ancha = horas "
-            "muy variables.",
-            "Un perfil marcado pide estacionalidad de periodo 24 en un modelo horario (SARIMA con s=24, "
-            "términos de Fourier diarios, MSTL). Si el pronóstico es diario, este patrón no hace falta modelarlo.")
+            "muy variables.")
 
     t = h.groupby([h.index.dayofweek, h.index.hour])["llegadas"].mean().unstack().reindex(index=range(7), columns=range(24))
     fig = go.Figure()
@@ -157,16 +151,12 @@ def dentro_del_dia(s: Series, reg: Registro) -> None:
     reg.fig(sec, "Perfil del día para cada día de la semana", F.estilo(fig, "hora de llegada", "llegadas promedio"),
             "Las 24 horas de cada día de la semana, una línea por día.",
             "Si las líneas tienen la misma forma y solo cambian de altura, el patrón diario y el semanal se "
-            "suman. Si la forma cambia (p. ej. el sábado el pico llega más tarde), interactúan.",
-            "Formas distintas → el ciclo útil es semanal de 168 horas (s=168, MSTL con 24 y 168, o "
-            "dummies día×hora). Misma forma → basta con un ciclo de 24 horas más un efecto por día.")
+            "suman. Si la forma cambia (p. ej. el sábado el pico llega más tarde), interactúan.")
 
     fig = go.Figure(F.heatmap_dia_hora(t.to_numpy(), HORAS, "llegadas"))
     reg.fig(sec, "Mapa de calor día × hora", F.estilo(fig, "hora de llegada", None),
             "Promedio de llegadas para cada combinación de día de la semana y hora (días completos).",
-            "Celdas oscuras = franjas con más llegadas. Es la vista más rápida para ver dónde se concentra la demanda.",
-            "Es el patrón que el modelo tiene que reproducir. También sirve como pronóstico de referencia "
-            "('el promedio de esa franja'), que cualquier modelo debería superar.")
+            "Celdas oscuras = franjas con más llegadas. Es la vista más rápida para ver dónde se concentra la demanda.")
 
 
 # --- D. Semana ---------------------------------------------------------------------------
@@ -187,9 +177,7 @@ def semana(s: Series, reg: Registro) -> None:
             "Distribución de las llegadas diarias para cada día de la semana, sin festivos ni temporadas especiales.",
             f"El día más cargado es {DIAS[int(t['mean'].idxmax())]} ({t['veces_la_media'].max():.2f} veces la media) "
             f"y el más liviano {DIAS[int(t['mean'].idxmin())]} ({t['veces_la_media'].min():.2f}). Cajas que no se "
-            "solapan = diferencia clara.",
-            "Diferencias claras → estacionalidad de periodo 7 en el modelo diario (SARIMA s=7, dummies de día, "
-            "STL con periodo 7). Es el patrón mínimo que debe capturar cualquier modelo diario.")
+            "solapan = diferencia clara.")
 
 
 # --- E. Año -------------------------------------------------------------------------------
@@ -209,18 +197,14 @@ def anio(s: Series, reg: Registro) -> None:
     reg.fig(sec, "Llegadas por día según el mes", F.estilo(fig, None, "llegadas por día"),
             f"Llegadas diarias agrupadas por mes del año, juntando los {anios} años disponibles.",
             "Meses con la caja más alta concentran demanda. Con pocos años, un mes puede verse alto por un "
-            "solo año atípico: compáralo con 'Año sobre año' en la sección B.",
-            "Patrón por mes consistente entre años → estacionalidad anual (Fourier anual o mes como variable). "
-            "Si solo hay un año, mejor no modelarla: no se puede distinguir de la tendencia.")
+            "solo año atípico: compáralo con 'Año sobre año' en la sección B.")
 
     w = ok.groupby("semana_anio")["llegadas"].mean() if "semana_anio" in ok else pd.Series(dtype=float)
     fig = go.Figure(go.Scatter(x=w.index, y=w.to_numpy(), mode="lines+markers", line=dict(color=C2, width=2),
                                marker=dict(size=5)))
     reg.fig(sec, "Llegadas por día según la semana del año", F.estilo(fig, "semana del año (ISO)", "llegadas por día"),
             "Promedio de llegadas diarias por semana del año, juntando todos los años.",
-            "Muestra picos de pocas semanas que el promedio por mes esconde (Semana Santa, Carnaval, fin de año).",
-            "Picos estrechos que no se explican por el mes son candidatos a variables de calendario (sección F), "
-            "no a estacionalidad suave.")
+            "Muestra picos de pocas semanas que el promedio por mes esconde (Semana Santa, Carnaval, fin de año).")
 
 
 # --- F. Calendario -------------------------------------------------------------------------
@@ -253,10 +237,7 @@ def calendario_efectos(s: Series, reg: Registro) -> None:
             "Para cada tipo de día especial, cuántas llegadas hubo frente a un día normal del mismo mes y día de "
             "la semana (mediana y rango intercuartil).",
             "Barras por debajo de la línea = menos llegadas que un día normal; por encima = más. Con pocos días "
-            "en una categoría (mira el número al pasar el cursor), el efecto es poco confiable.",
-            "Efectos lejos de 1 → incluir esas fechas como variables exógenas (dummies de festivo, puente, "
-            "Semana Santa, Carnaval). Prophet y los modelos de regresión las aceptan directo; en SARIMA van como "
-            "regresores (SARIMAX). Las fechas ya vienen marcadas en series_diarias.parquet.")
+            "en una categoría (mira el número al pasar el cursor), el efecto es poco confiable.")
 
     fest = ok.index[ok["festivo"]]
     filas = []
@@ -271,9 +252,7 @@ def calendario_efectos(s: Series, reg: Registro) -> None:
     reg.fig(sec, "Alrededor de un festivo", F.estilo(fig, "días respecto al festivo", "llegadas ÷ esperado"),
             "Llegadas en los días antes y después de un festivo frente a un día normal.",
             "Si el día siguiente sube por encima de 1, la gente que no fue en el festivo llega después "
-            "(demanda represada).",
-            "Un rebote después del festivo pide una variable 'día después de festivo' además de la del festivo "
-            "(ya está en series_diarias.parquet como despues_de_festivo).")
+            "(demanda represada).")
 
 
 # --- G. Descomposición ------------------------------------------------------------------------
@@ -311,9 +290,7 @@ def descomposicion(s: Series, reg: Registro) -> None:
                 "La serie diaria separada en tendencia, estacionalidad (semanal y, si hay dos años, anual) y resto "
                 "(STL/MSTL sobre el tramo continuo de días completos).",
                 "Compara la amplitud de cada panel: el componente que más se mueve es el que más explica. El resto "
-                "debería verse como ruido sin patrón; picos sueltos ahí son días atípicos.",
-                "La tabla de fuerzas resume cuánto pesa cada componente. Fuerza alta de un ciclo = el modelo tiene "
-                "que incluirlo. Un resto con patrón todavía = falta algo (calendario, otro ciclo).")
+                "debería verse como ruido sin patrón; picos sueltos ahí son días atípicos.")
         resid = comps[-1][1].to_numpy()
         for n, v in comps[:-1]:
             filas.append({"serie": "diaria", "componente": n, "fuerza": _fuerza(resid, v.to_numpy())})
@@ -343,9 +320,7 @@ def descomposicion(s: Series, reg: Registro) -> None:
                 "La serie por hora separada en tendencia, ciclo diario (24 h), ciclo semanal (168 h) y resto "
                 "(MSTL sobre el último año del tramo continuo; se muestran las últimas 6 semanas para ver el detalle).",
                 "El ciclo de 168 h recoge lo que el de 24 h no explica: diferencias entre días de la semana y entre "
-                "sus perfiles horarios.",
-                "Si el ciclo semanal pesa poco frente al diario, un modelo con s=24 y un efecto por día puede "
-                "bastar. Si pesa mucho, el modelo horario necesita el ciclo de 168 h.")
+                "sus perfiles horarios.")
         resid = r.resid.to_numpy()
         for n, v in comps[:-1]:
             filas.append({"serie": "horaria", "componente": n, "fuerza": _fuerza(resid, v.to_numpy())})
@@ -378,29 +353,23 @@ def autocorrelacion(s: Series, reg: Registro) -> None:
         reg.fig(sec, "ACF de la serie diaria", _acf_fig(c, 56, [7, 14, 21, 28, 35, 42, 49, 56], "rezago (días)"),
                 "Correlación de las llegadas de un día con las de k días antes (barras naranja: múltiplos de 7).",
                 "Barras que salen de la banda punteada son correlaciones reales. Picos cada 7 días = ciclo semanal. "
-                "Barras que bajan muy despacio = tendencia o nivel que cambia (serie no estacionaria).",
-                "Decaimiento lento → diferenciar (d=1) o modelar la tendencia. Picos en 7, 14, 21… → término "
-                "estacional semanal (D=1 con s=7, o componentes estacionales).")
+                "Barras que bajan muy despacio = tendencia o nivel que cambia (serie no estacionaria).")
         reg.fig(sec, "PACF de la serie diaria", _acf_fig(c, 35, [7, 14, 21, 28, 35], "rezago (días)", pacf=True),
                 "Correlación parcial: cuánto aporta el rezago k una vez descontados los rezagos más cortos.",
                 "El último rezago corto que sale de la banda sugiere el orden autorregresivo; picos en 7, 14 sugieren "
-                "términos autorregresivos estacionales.",
-                "Guía clásica de Box-Jenkins: PACF que se corta en p y ACF que decae → AR(p); al revés → MA(q). "
-                "Úsalo como punto de partida y confirma con AIC/validación.")
+                "términos autorregresivos estacionales.")
         d7 = c.diff(7)
         reg.fig(sec, "ACF después de quitar el ciclo semanal (diferencia de 7 días)",
                 _acf_fig(d7, 56, [7, 14, 21, 28], "rezago (días)"),
                 "La misma ACF sobre y(t) − y(t−7), es decir, quitando el patrón semanal.",
                 "Si casi todo queda dentro de la banda, la diferencia semanal ya volvió la serie casi ruido; un "
-                "pico negativo en 7 es típico de esta diferencia y se corrige con un término MA estacional.",
-                "Indica si D=1 con s=7 basta o si además hace falta d=1.")
+                "pico negativo en 7 es típico de esta diferencia y se corrige con un término MA estacional.")
     hc = horas_continuas(s)["llegadas"].astype(float)
     if len(hc) >= 2 * 168:
         reg.fig(sec, "ACF de la serie horaria", _acf_fig(hc, 24 * 15, [24 * k for k in range(1, 16)], "rezago (horas)"),
                 "Correlación de las llegadas de una hora con las de k horas antes, hasta 15 días (naranja: múltiplos "
                 "de 24 h).",
-                "Picos cada 24 h = ciclo diario; el pico en 168 h más alto que los vecinos = ciclo semanal.",
-                "Confirma qué periodos estacionales poner en un modelo horario (24 y/o 168).")
+                "Picos cada 24 h = ciclo diario; el pico en 168 h más alto que los vecinos = ciclo semanal.")
     if len(c) >= 60:
         from statsmodels.stats.diagnostic import acorr_ljungbox
         from statsmodels.tsa.seasonal import STL
@@ -409,7 +378,7 @@ def autocorrelacion(s: Series, reg: Registro) -> None:
         lb.columns = ["rezagos", "estadistico", "p_valor"]
         reg.tabla(sec, "ljung_box_resto", lb,
                   "Prueba de Ljung-Box sobre el resto de la descomposición STL semanal. p < 0.05 = el resto todavía "
-                  "tiene autocorrelación, o sea, información que un modelo puede aprovechar.",
+                  "tiene autocorrelación.",
                   titulo="¿Queda autocorrelación después de quitar tendencia y ciclo semanal?", mostrar=True)
 
 
@@ -435,8 +404,7 @@ def estacionariedad(s: Series, reg: Registro) -> None:
         filas.append({"serie": nombre, "p_ADF": p_adf, "p_KPSS": p_kpss, "lectura": lectura})
     reg.tabla(sec, "pruebas_estacionariedad", pd.DataFrame(filas),
               "ADF: hipótesis nula = hay raíz unitaria (no estacionaria); p < 0.05 la rechaza. KPSS: hipótesis nula = "
-              "estacionaria; p < 0.05 la rechaza (el KPSS de statsmodels topa el p entre 0.01 y 0.1). La serie más "
-              "simple que sale 'estacionaria' indica cuánta diferenciación hace falta.",
+              "estacionaria; p < 0.05 la rechaza (el KPSS de statsmodels topa el p entre 0.01 y 0.1).",
               titulo="Pruebas ADF y KPSS (serie diaria)", mostrar=True)
     r_m = c.rolling(28).mean()
     r_s = c.rolling(28).std()
@@ -446,9 +414,7 @@ def estacionariedad(s: Series, reg: Registro) -> None:
     reg.fig(sec, "Media y variabilidad en el tiempo", F.estilo(fig, alto=480),
             "Media y desviación estándar de las llegadas diarias en ventanas móviles de 28 días.",
             "Una media que sube o baja = tendencia. Una desviación que crece cuando crece la media = la "
-            "variabilidad depende del nivel.",
-            "Desviación que sigue a la media → transformar antes de modelar (logaritmo, raíz o Box-Cox, ver "
-            "sección J) o usar un modelo de conteo (Poisson/Binomial negativa).")
+            "variabilidad depende del nivel.")
 
 
 # --- J. Distribución -----------------------------------------------------------------------------
@@ -469,9 +435,7 @@ def distribucion(s: Series, reg: Registro) -> None:
     reg.fig(sec, "Llegadas por hora frente a una Poisson", F.estilo(fig, "llegadas en la hora", "proporción de horas"),
             "Cuántas horas tuvieron 0, 1, 2… llegadas, contra lo que daría una Poisson con la misma media.",
             "Si las barras son más anchas que la curva (más horas con muy pocas y con muchas), hay sobredispersión. "
-            "Ojo: parte se debe al ciclo del día; la figura siguiente lo descuenta.",
-            "Conteos bajos por hora → un modelo de conteo (Poisson o Binomial negativa, GLM/GAM con estacionalidad) "
-            "suele funcionar mejor que suponer normalidad.")
+            "Ojo: parte se debe al ciclo del día; la figura siguiente lo descuenta.")
 
     g = h.groupby([h.index.dayofweek, h.index.hour])["llegadas"].agg(["mean", "var"])
     fig = go.Figure()
@@ -483,9 +447,7 @@ def distribucion(s: Series, reg: Registro) -> None:
     reg.fig(sec, "Varianza frente a media en cada franja", F.estilo(fig, "media de llegadas en la franja", "varianza"),
             "Cada punto es una franja día×hora (168): su media y su varianza de llegadas por hora.",
             f"En una Poisson los puntos caerían sobre la diagonal. En promedio la varianza es {disp:.2f} veces la "
-            "media: por encima de 1 = sobredispersión aun descontando el ciclo.",
-            "Cerca de 1 → Poisson basta. Claramente por encima → Binomial negativa (o Poisson con un efecto "
-            "aleatorio). Por debajo de 1 es raro en llegadas y sugiere revisar el registro.")
+            "media: por encima de 1 = sobredispersión aun descontando el ciclo.")
 
     d = dias_ok(s)["llegadas"].astype(float)
     filas = [("varianza/media por franja día×hora (promedio)", round(disp, 3)),
@@ -517,9 +479,7 @@ def flujo(s: Series, reg: Registro) -> None:
             "Totales por semana (semanas de días completos) de llegadas, llegadas que terminan en cama, contactos "
             "breves, ingresos a cama (de cualquier origen) y altas de cama.",
             "Ingresos y altas deberían moverse juntos a largo plazo; si los ingresos superan a las altas por "
-            "varias semanas, el censo de camas sube.",
-            "Si el objetivo es la ocupación, pronosticar llegadas no basta: también ingresos y altas. Los contactos "
-            "breves quizá convenga pronosticarlos aparte (no ocupan cubículo).")
+            "varias semanas, el censo de camas sube.")
 
     h = s.horas[s.horas["completo"].astype(bool)]
     p = h.groupby(h.index.hour)[["llegadas_hospitalizan", "ingresos_cama", "altas_cama"]].mean()
@@ -530,9 +490,7 @@ def flujo(s: Series, reg: Registro) -> None:
     reg.fig(sec, "¿A qué hora se liberan y se ocupan las camas?", F.estilo(fig, "hora del día", "eventos promedio en la hora"),
             "Promedio por hora del día de las llegadas que acaban hospitalizadas, los ingresos a cama y las altas.",
             "Si las altas se concentran tarde y las llegadas que necesitan cama temprano, los pacientes esperan en "
-            "urgencias el desfase entre las dos curvas.",
-            "Es la conexión entre el pronóstico y las recomendaciones: un modelo horario de altas e ingresos "
-            "permite simular, p. ej., adelantar las altas unas horas.")
+            "urgencias el desfase entre las dos curvas.")
 
     cen = d.loc[d["completo"], ["censo_urgencias_medio", "censo_hospitalizacion_medio"]]
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, subplot_titles=("urgencias", "hospitalización"))
@@ -542,9 +500,7 @@ def flujo(s: Series, reg: Registro) -> None:
             "Personas presentes en promedio cada día (como la consulta 25: urgencias cortado al ingreso a cama, "
             "sin estancias extremas).",
             "La ocupación absoluta todavía no es confiable (capacidad real pendiente con el HUN); mira los "
-            "patrones y los cambios de nivel.",
-            "El censo es una serie con mucha memoria (cada día arrastra a los pacientes del anterior): suele "
-            "necesitar d=1 o un modelo de stock (entradas − salidas) en vez de modelarlo como conteo.")
+            "patrones y los cambios de nivel.")
 
     hc = horas_continuas(s)
     if len(hc) >= 2 * 168:
@@ -568,8 +524,7 @@ def flujo(s: Series, reg: Registro) -> None:
                 "Correlación entre una serie en la hora t y otra en la hora t+k, después de quitar a las dos su "
                 "promedio por día y hora (así no se correlacionan solo por tener el mismo horario).",
                 "Un pico en k horas = la primera serie anticipa a la segunda por k horas. P. ej., si las altas de "
-                "cama anticipan los ingresos desde urgencias, la cama es el cuello de botella.",
-                "Las series que anticipan a otra sirven como regresores rezagados (SARIMAX/VAR) para pronosticarla.")
+                "cama anticipan los ingresos desde urgencias, la cama es el cuello de botella.")
 
     m = d[d["completo"]].resample("MS")[["llegadas", "llegadas_hospitalizan", "llegadas_contacto_breve"]].sum()
     m["proporcion_hospitalizada"] = m["llegadas_hospitalizan"] / m["llegadas"]
@@ -609,9 +564,7 @@ def grupos(s: Series, reg: Registro) -> None:
     reg.fig(sec, "Llegadas semanales por grupo", F.estilo(fig, None, "llegadas por semana", alto=460),
             "Llegadas por semana separadas por grupo de edad, sexo o destino (menú arriba a la derecha).",
             "Grupos con tendencias o estacionalidades distintas (p. ej. niños con picos en temporada de lluvias) "
-            "no se ven en la serie total.",
-            "Si los grupos se comportan distinto, puede convenir pronosticarlos por separado y sumar (pronóstico "
-            "jerárquico) o meter la proporción como variable.")
+            "no se ven en la serie total.")
     reg.tabla(sec, "grupos", pd.DataFrame(filas), "Por grupo: llegadas promedio por día, proporción del total y "
               "coeficiente de variación diario (más alto = más ruidoso).", titulo="Peso y variabilidad de cada grupo",
               mostrar=True)
@@ -625,9 +578,7 @@ def grupos(s: Series, reg: Registro) -> None:
             fig.add_scatter(x=DIAS, y=dw[c], mode="lines+markers", name=str(c), line=dict(color=F.SERIES[i % len(F.SERIES)], width=2))
         reg.fig(sec, "Patrón semanal por grupo de edad", F.estilo(fig, None, "llegadas ÷ promedio del grupo"),
                 "Para cada grupo de edad, las llegadas de cada día de la semana divididas por el promedio del grupo.",
-                "Líneas con formas distintas = cada grupo tiene su propio ciclo semanal.",
-                "Formas parecidas → un solo modelo para el total sirve. Distintas → modelos por grupo o "
-                "interacción grupo×día.")
+                "Líneas con formas distintas = cada grupo tiene su propio ciclo semanal.")
 
 
 # --- M. Tiempos ---------------------------------------------------------------------------------------
@@ -649,9 +600,7 @@ def tiempos(s: Series, reg: Registro) -> None:
             "Mediana semanal del tiempo en urgencias por destino, con y sin cortar urgencias al ingreso a cama "
             "(solo semanas con 10 episodios o más).",
             "La distancia entre la línea punteada y la continua de 'hospitalizado' es el tiempo que urgencias "
-            "seguía abierto con el paciente ya en cama. La continua es la comparable entre destinos.",
-            "Si el tiempo en urgencias tiene tendencia o estacionalidad, también es una serie a pronosticar; para "
-            "el hallazgo de 'los hospitalizados esperan más', usa la versión con recorte.")
+            "seguía abierto con el paciente ya en cama. La continua es la comparable entre destinos.")
     w = semanal(s.dias[["llegadas"]], s.dias["completo"])["llegadas"]
     m = t.merge(w.rename("llegadas_semana").reset_index().rename(columns={"fecha": "semana"}), on="semana")
     filas = []
@@ -665,42 +614,15 @@ def tiempos(s: Series, reg: Registro) -> None:
                 mz["p50_h_urg_recortado"], method="spearman"), "semanas": len(mz)})
     reg.fig(sec, "¿Más llegadas, más espera?", F.estilo(fig, "llegadas en la semana", "mediana de horas en urgencias (con recorte)"),
             "Cada punto es una semana: cuántas llegadas hubo y la mediana del tiempo en urgencias.",
-            "Una nube que sube hacia la derecha = cuando llega más gente, cada uno espera más (congestión).",
-            "Una relación clara justifica usar el pronóstico de llegadas como insumo del pronóstico de tiempos o "
-            "de la simulación de colas.")
+            "Una nube que sube hacia la derecha = cuando llega más gente, cada uno espera más (congestión).")
     if filas:
         reg.tabla(sec, "congestion", pd.DataFrame(filas), "Correlación de Spearman entre llegadas semanales y mediana de "
                   "horas en urgencias (con recorte). Cerca de 0 = sin relación; cerca de 1 = más llegadas, más espera.",
                   titulo="Llegadas y espera", mostrar=True)
 
 
-# --- N. Qué decidir -------------------------------------------------------------------------------------
-GUIA = pd.DataFrame([
-    ("¿Pronóstico por hora o por día?", "C, G", "Por día: más estable, sirve para planear turnos. Por hora: lo que "
-     "pide la simulación y las alertas de saturación. Se puede hacer por día y repartir con el perfil horario."),
-    ("¿Qué ciclos incluir?", "C, D, E, G, H", "24 h y 168 h en horario; 7 días en diario; anual solo si hay dos o más "
-     "años completos."),
-    ("¿Diferenciar?", "H, I", "La serie más simple que sale estacionaria en la tabla ADF/KPSS indica d y D."),
-    ("¿Transformar?", "I, J", "Desviación que crece con la media o lambda de Box-Cox lejos de 1 → log, raíz o "
-     "modelo de conteo."),
-    ("¿Qué distribución?", "J", "Conteos por hora bajos → Poisson; con sobredispersión → Binomial negativa."),
-    ("¿Variables de calendario?", "F", "Festivos, puentes, Semana Santa, Carnaval y día después de festivo ya vienen "
-     "en series_diarias.parquet."),
-    ("¿Otras series como regresores?", "K", "Las que anticipan a otra en la correlación cruzada (p. ej. altas de cama)."),
-    ("¿Un modelo o varios?", "L", "Grupos con patrones distintos → modelos por grupo o jerárquico."),
-    ("¿Cómo validar?", "A", "Entrenar con días completos y probar en los últimos meses completos (validación por "
-     "origen móvil). Comparar contra el promedio de la franja (sección C) y contra 'lo mismo que la semana pasada'."),
-], columns=["decisión", "secciones", "qué mirar / opciones habituales"])
-
-
-def guia(s: Series, reg: Registro) -> None:
-    reg.tabla("N. Qué decidir para el modelo", "guia_decisiones", GUIA,
-              "Lista de decisiones de modelado y en qué parte del reporte se apoya cada una. No es una receta: "
-              "las opciones dependen de lo que muestren los datos.", titulo="Decisiones y dónde mirarlas", mostrar=True)
-
-
 SECCIONES = [("cobertura", cobertura), ("tendencia", tendencia), ("dentro del día", dentro_del_dia),
              ("semana", semana), ("año", anio), ("calendario", calendario_efectos),
              ("descomposición", descomposicion), ("autocorrelación", autocorrelacion),
              ("estacionariedad", estacionariedad), ("distribución", distribucion), ("flujo", flujo),
-             ("grupos", grupos), ("tiempos", tiempos), ("guía", guia)]
+             ("grupos", grupos), ("tiempos", tiempos)]

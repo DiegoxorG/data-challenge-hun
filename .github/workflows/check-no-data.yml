@@ -70,10 +70,10 @@ jobs:
           python -m Cuellos_botella.resumen_seguro --salida "$DATA_DIR/cuellos_botella_salidas"
           python -m series_tiempo --estricto
           python -m series_tiempo.resumen_seguro
-      - name: Ejecutar los notebooks (los outputs quedan en la carpeta temporal)
+      - name: Ejecutar la guía de familiarización (los outputs quedan en la carpeta temporal)
         run: |
           export DATA_DIR="$RUNNER_TEMP/hun_data"
-          for nb in 00_guia_familiarizacion 01_series_tiempo_arranque; do
+          for nb in 00_guia_familiarizacion; do
             jupyter nbconvert --to notebook --execute "notebooks/$nb.ipynb" \
               --output "$RUNNER_TEMP/$nb.ejecutado.ipynb" --ExecutePreprocessor.timeout=600
           done

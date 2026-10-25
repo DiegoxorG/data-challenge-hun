@@ -3,7 +3,7 @@
 
 Corre las consultas AGREGADAS sql/01_episodios/26-28 contra la base (VPN + .env), arma las series
 por hora, día y semana con el calendario colombiano, y escribe en DATA_DIR/series_tiempo:
-  reporte_series.html   el reporte para decidir el modelo (abre sin internet)
+  reporte_series.html   el reporte con las gráficas exploratorias (abre sin internet)
   datos/*.parquet       las series listas para modelar (series_tiempo.cargar())
   tablas/*.csv          las métricas de cada sección
 Con --sin-base reusa los datos de una corrida anterior (no se conecta).
@@ -27,12 +27,12 @@ for _stream in (sys.stdout, sys.stderr):
 
 INTRO = """
 <h3>Para qué es esto</h3>
-<p>Reúne todo lo que hace falta mirar antes de elegir un modelo de series de tiempo para urgencias:
+<p>Gráficas exploratorias de las series de urgencias para quien va a construir el pronóstico:
 cobertura, tendencia, los ciclos del día, la semana y el año, el efecto de festivos y temporadas, la
 descomposición, la autocorrelación, la estacionariedad, cómo se distribuyen los conteos y cómo se
 relacionan las llegadas con los ingresos, las altas y el censo.</p>
-<p>Cada gráfica tiene tres partes: <b>qué muestra</b>, <b>cómo leerla</b> y <b>qué implica para el modelo</b>.
-La sección N junta las decisiones de modelado y dónde mirar cada una.</p>
+<p>Cada gráfica dice <b>qué muestra</b> y <b>cómo leerla</b>. Las conclusiones y el modelo quedan a criterio
+de quien modele.</p>
 <h3>Qué se cuenta</h3>
 <p><b>Llegadas</b> = episodios que empiezan en urgencias (definición de <code>sql/01_episodios/_episodios.sql</code>),
 por hora de llegada. <b>Ingresos</b> y <b>altas de cama</b> = inicio y fin de cada hospitalización. <b>Censos</b> =
@@ -41,8 +41,7 @@ por el extracto quedan fuera de todos los cálculos.</p>
 <h3>Para modelar</h3>
 <p>Las series están en <code>datos/series_horarias.parquet</code> y <code>datos/series_diarias.parquet</code> (con
 festivos, puentes, Semana Santa, Carnaval y la columna <code>completo</code>). Desde Python:
-<code>from series_tiempo import cargar; s = cargar()</code>. El notebook
-<code>notebooks/01_series_tiempo_arranque.ipynb</code> trae una primera validación con modelos de referencia.</p>
+<code>from series_tiempo import cargar; s = cargar()</code>.</p>
 """
 
 

@@ -76,10 +76,10 @@ def test_punta_a_punta_sin_base(tmp_path, capsys):
     datos.guardar_crudo(crudo_inventado(), salida)
     assert main(["--salida", str(salida), "--sin-base", "--estricto"]) == 0
     html = (salida / "reporte_series.html").read_text(encoding="utf-8")
-    for sec in "ABCDEFGHIJKLMN":
+    for sec in "ABCDEFGHIJKLM":
         assert f">{sec}. " in html, sec
     for t in ["cobertura", "perfil_hora", "efecto_calendario", "fuerza_componentes", "pruebas_estacionariedad",
-              "dispersion", "correlacion_cruzada", "grupos", "guia_decisiones"]:
+              "dispersion", "correlacion_cruzada", "grupos"]:
         assert (salida / "tablas" / f"{t}.csv").exists(), t
     s = datos.cargar(salida)
     assert {"festivo", "carnaval", "completo"} <= set(s["dias"].columns)

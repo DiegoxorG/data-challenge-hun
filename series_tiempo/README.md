@@ -1,6 +1,6 @@
-# Series de tiempo: exploración para el pronóstico
+# Series de tiempo: gráficas exploratorias para el pronóstico
 
-Arma, en un solo comando, todo lo que hay que mirar antes de elegir un modelo de series de tiempo para urgencias, y deja las series limpias para modelar. Pensado para que quien modele (Sebastián) no tenga que escribir SQL ni limpiar nada.
+Arma, en un solo comando, las gráficas exploratorias (EDA) de las series de urgencias y deja las series limpias, listas para que Sebastián construya el modelo sin tener que escribir SQL ni limpiar nada. No ajusta ni recomienda modelos: eso queda a criterio de quien modele.
 
 ## Cómo se corre (lo hace quien tenga VPN y `.env`)
 
@@ -18,7 +18,7 @@ Corre las consultas **agregadas** `sql/01_episodios/26`, `27` y `28` (una fila p
 
 | Archivo | Qué es |
 |---|---|
-| `reporte_series.html` | El reporte. Abre sin internet. Cada gráfica dice **qué muestra**, **cómo leerla** y **qué implica para el modelo**. |
+| `reporte_series.html` | El reporte. Abre sin internet. Cada gráfica dice **qué muestra** y **cómo leerla**. |
 | `datos/series_horarias.parquet` | Una fila por hora: llegadas, llegadas que se hospitalizan, contactos breves, ingresos y altas de cama, censos de urgencias y hospitalización, `completo`. |
 | `datos/series_diarias.parquet` | Una fila por día: lo mismo sumado (censos como media y máximo) + calendario: día de la semana, festivo, puente, día después de festivo, Semana Santa, Carnaval, 24 dic–1 ene, `completo`. |
 | `datos/llegadas_diarias_por_grupo.parquet` | Llegadas por día por sexo, grupo de edad y destino. |
@@ -27,7 +27,7 @@ Corre las consultas **agregadas** `sql/01_episodios/26`, `27` y `28` (una fila p
 
 **Todo esto es información derivada de los datos del HUN**: se queda en el computador, no va a git, a la nube ni a ninguna IA. El reporte lleva la marca `hun-datos` y el hook lo bloquea si alguien lo intenta commitear.
 
-## Cómo se modela (Sebastián)
+## Cómo se cargan las series para modelar
 
 ```python
 from series_tiempo import cargar
@@ -38,26 +38,24 @@ y = d.loc[d["completo"], "llegadas"]
 
 - `completo = False` marca meses incompletos y días cortados por el extracto: **no se usan para entrenar ni evaluar**.
 - Para STL, ACF o SARIMA, que piden serie sin huecos: `series_tiempo.datos.tramo_continuo(d["completo"])`.
-- `notebooks/01_series_tiempo_arranque.ipynb` ya trae el corte entrenamiento/prueba, las métricas (MAE, RMSE, MASE), los modelos de referencia (naive semanal y promedio por franja) y un primer SARIMAX con calendario. Lo que hay que superar está ahí.
 
 ## Qué trae el reporte
 
-| Sección | Para decidir |
+| Sección | Qué muestra |
 |---|---|
-| A. Datos y cobertura | Periodo de entrenamiento; meses excluidos |
-| B. Nivel y tendencia | Si hay tendencia y si la estacionalidad anual se repite entre años |
-| C. Dentro del día | Ciclo de 24 h; si el perfil cambia según el día (ciclo de 168 h); mapa día × hora |
-| D. Semana | Ciclo de 7 días |
-| E. Año | Estacionalidad anual; picos de pocas semanas |
-| F. Festivos y temporadas | Qué fechas usar como exógenas (festivos colombianos, puentes, Semana Santa, Carnaval de Barranquilla, fin de año) |
+| A. Datos y cobertura | Rango de la serie, días completos, meses excluidos, llegadas por día con medias móviles |
+| B. Nivel y tendencia | Año sobre año por mes; recta de tendencia y promedio por año |
+| C. Dentro del día | Llegadas por hora; perfil del día para cada día de la semana; mapa día × hora |
+| D. Semana | Llegadas por día según el día de la semana |
+| E. Año | Llegadas por mes y por semana del año |
+| F. Festivos y temporadas | Llegadas en festivos, puentes, Semana Santa, Carnaval de Barranquilla y fin de año frente a un día normal; días alrededor de un festivo |
 | G. Descomposición | STL/MSTL diaria y horaria; fuerza de cada componente; días atípicos |
 | H. Autocorrelación | ACF/PACF diaria y horaria, con y sin diferencia semanal; Ljung-Box |
-| I. Estacionariedad | ADF y KPSS en nivel y con diferencias: cuánto diferenciar |
-| J. Distribución | Poisson o Binomial negativa; exceso de ceros; lambda de Box-Cox |
+| I. Estacionariedad | ADF y KPSS en nivel y con diferencias; media y desviación móviles |
+| J. Distribución | Conteos por hora frente a una Poisson; varianza frente a media por franja; ceros; lambda de Box-Cox |
 | K. Otras series del flujo | Ingresos y altas de cama, censos, a qué hora se liberan camas, correlación cruzada entre series |
-| L. Por grupo | Si conviene modelar por edad, sexo o destino |
-| M. Tiempos en urgencias | Tendencia de la espera; si más llegadas = más espera |
-| N. Qué decidir | La lista de decisiones y dónde mirar cada una |
+| L. Por grupo | Llegadas por edad, sexo y destino; patrón semanal por edad |
+| M. Tiempos en urgencias | Mediana semanal de la espera con y sin recorte; llegadas frente a espera |
 
 ## Notas
 

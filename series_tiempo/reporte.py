@@ -1,5 +1,5 @@
 """Registro de figuras y tablas, y el reporte HTML autocontenido (mismo estilo que Cuellos_botella).
-Cada figura lleva tres textos: qué muestra, cómo leerla y qué implica para el modelo."""
+Cada figura lleva dos textos: qué muestra y cómo leerla."""
 from __future__ import annotations
 
 import html
@@ -13,9 +13,8 @@ from plotly.offline import get_plotlyjs
 from Cuellos_botella.reporte import CSS, MARCA_DERIVADO
 
 CSS_EXTRA = """
-.tri { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:8px 0 4px; }
+.tri { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin:8px 0 4px; }
 .tri div { font-size:14px; color:var(--ink2); } .tri b { display:block; color:var(--ink); font-size:13px; margin-bottom:2px; }
-.modelo { border-left:3px solid var(--accent); padding-left:8px; }
 .intro p { max-width:95ch; } .num { font-variant-numeric: tabular-nums; }
 @media (max-width:800px) { .tri { grid-template-columns:1fr; } }
 """
@@ -28,7 +27,6 @@ class Fig:
     fig: object
     muestra: str
     leer: str
-    modelo: str
 
 
 @dataclass
@@ -52,8 +50,8 @@ class Registro:
         self.salida = Path(self.salida)
         (self.salida / "tablas").mkdir(parents=True, exist_ok=True)
 
-    def fig(self, seccion, titulo, fig, muestra, leer, modelo):
-        self.piezas.append(Fig(seccion, titulo, fig, muestra, leer, modelo))
+    def fig(self, seccion, titulo, fig, muestra, leer):
+        self.piezas.append(Fig(seccion, titulo, fig, muestra, leer))
 
     def tabla(self, seccion, nombre, df, texto, titulo=None, mostrar=False):
         """Guarda la tabla en tablas/<nombre>.csv; con `mostrar` también la pone en el reporte."""
@@ -95,8 +93,7 @@ def escribir(reg: Registro, intro_html: str, origen: str) -> Path:
                 cuerpo.append(
                     f"<div class='card' id='{ancla}'><h3>{html.escape(p.titulo)}</h3><div class='tri'>"
                     f"<div><b>Qué muestra</b>{html.escape(p.muestra)}</div>"
-                    f"<div><b>Cómo leerla</b>{html.escape(p.leer)}</div>"
-                    f"<div class='modelo'><b>Para el modelo</b>{html.escape(p.modelo)}</div></div>{div}</div>")
+                    f"<div><b>Cómo leerla</b>{html.escape(p.leer)}</div></div>{div}</div>")
             else:
                 cuerpo.append(f"<div class='card' id='{ancla}'><h3>{html.escape(p.titulo)}</h3>"
                               f"<p class='ley'>{html.escape(p.texto)}</p>{_tabla_html(p.df)}</div>")

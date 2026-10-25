@@ -41,8 +41,7 @@ python -c "from hun.db import ping; ping()"
 |---|---|---|
 | `notebooks/00_guia_familiarizacion.ipynb` | Conocer la base con tus propios ojos | en pantalla |
 | `python -m Cuellos_botella --config Cuellos_botella/config.yaml --entrada sql/02_cuellos_botella/entrada.sql` | Dónde se acumula la espera (flujo, censo, transiciones) | `cuellos_botella_salidas/` |
-| `python -m series_tiempo` | Todo lo que hay que mirar antes de elegir el modelo de pronóstico, y las series listas para modelar | `series_tiempo/` |
-| `notebooks/01_series_tiempo_arranque.ipynb` | Primer pronóstico con modelos de referencia | en pantalla |
+| `python -m series_tiempo` | Gráficas exploratorias de las series (EDA) para el pronóstico, y las series listas para modelar | `series_tiempo/` |
 
 Cada herramienta tiene un `resumen_seguro` que traduce los resultados a palabras: es lo único que se comparte con Claude.
 
@@ -64,7 +63,7 @@ sql/                        consultas (versionadas); los resultados NO
 src/hun/                    config (.env + DATA_DIR validada), conexión, extracción
 Cuellos_botella/            reporte de cuellos de botella (Joseph)
 series_tiempo/              reporte y series para el pronóstico
-notebooks/                  guía de familiarización y arranque de series, siempre sin outputs
+notebooks/                  guía de familiarización y análisis, siempre sin outputs
 dashboard/                  Power BI como .pbit o PBIP, nunca .pbix
 scripts/                    setup, verificador anti-fuga, generador sintético, resúmenes seguros
 tests/                      tests del verificador anti-fuga
