@@ -7,6 +7,13 @@ git config core.hooksPath .githooks
 chmod +x .githooks/pre-commit 2>/dev/null || true
 echo "OK  hooks anti-fuga activados (.githooks)"
 
+# Limpia los outputs de los notebooks automáticamente al hacer git add (si nbstripout está instalado)
+if command -v nbstripout >/dev/null 2>&1; then
+  nbstripout --install && echo "OK  nbstripout activado: los notebooks se guardan en git sin outputs"
+else
+  echo "--  nbstripout no está instalado (pip install -r requirements.txt); el hook igual bloquea outputs"
+fi
+
 if [ ! -f .env ]; then
   cp .env.example .env
   echo "OK  .env creado desde .env.example  -> llénalo con TUS credenciales (no se sube)"

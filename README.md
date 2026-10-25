@@ -29,11 +29,30 @@ python -c "from hun.db import ping; ping()"
 
 ## Flujo de trabajo
 
-1. Escribe la consulta en `sql/` (se versiona).
-2. Extrae a tu `DATA_DIR`: `python -m hun.extract sql/00_exploracion/03_llegadas_heatmap.sql`
-3. Analiza en `notebooks/` cargando con `hun.extract.load("03_llegadas_heatmap")`.
+1. Escribe la consulta en `sql/` (se versiona). Si devuelve una fila por paciente o segmento, márcala con `-- @nivel_paciente`.
+2. Extrae a tu `DATA_DIR` (solo agregados): `python -m hun.extract sql/01_episodios/21_llegadas_por_hora.sql`
+3. Analiza en `notebooks/` cargando con `hun.extract.load("21_llegadas_por_hora")`.
 4. Antes de commitear un notebook, limpia los outputs (el hook te lo exige).
-5. Commit → el hook revisa que no vaya nada sensible. GitHub Actions vuelve a revisar en cada push.
+5. Commit → el hook revisa que no vaya nada sensible. GitHub Actions vuelve a revisar y corre los tests con la base sintética en cada push.
+
+## Herramientas
+
+| Comando | Para qué | Salida (en `DATA_DIR`) |
+|---|---|---|
+| `notebooks/00_guia_familiarizacion.ipynb` | Conocer la base con tus propios ojos | en pantalla |
+| `python -m Cuellos_botella --config Cuellos_botella/config.yaml --entrada sql/02_cuellos_botella/entrada.sql` | Dónde se acumula la espera (flujo, censo, transiciones) | `cuellos_botella_salidas/` |
+| `python -m series_tiempo` | Todo lo que hay que mirar antes de elegir el modelo de pronóstico, y las series listas para modelar | `series_tiempo/` |
+| `notebooks/01_series_tiempo_arranque.ipynb` | Primer pronóstico con modelos de referencia | en pantalla |
+
+Cada herramienta tiene un `resumen_seguro` que traduce los resultados a palabras: es lo único que se comparte con Claude.
+
+## Probar sin la base del HUN
+
+```bash
+# PostgreSQL LOCAL de pruebas (nunca el del HUN): crea una base inventada con la misma estructura
+python scripts/generar_sintetico.py --url postgresql://yo@localhost:5432/omop_sintetico --pacientes 20000
+HUN_TEST_PG_URL=postgresql://yo@localhost:5432/omop_sintetico python -m pytest
+```
 
 ## Estructura
 
@@ -43,9 +62,12 @@ python -c "from hun.db import ping; ping()"
 docs/                       protocolo de datos, metodología, decisiones
 sql/                        consultas (versionadas); los resultados NO
 src/hun/                    config (.env + DATA_DIR validada), conexión, extracción
-notebooks/                  análisis, siempre sin outputs
+Cuellos_botella/            reporte de cuellos de botella (Joseph)
+series_tiempo/              reporte y series para el pronóstico
+notebooks/                  guía de familiarización y arranque de series, siempre sin outputs
 dashboard/                  Power BI como .pbit o PBIP, nunca .pbix
-scripts/                    setup y verificador anti-fuga
+scripts/                    setup, verificador anti-fuga, generador sintético, resúmenes seguros
+tests/                      tests del verificador anti-fuga
 ```
 
 ## Equipo

@@ -35,11 +35,24 @@ Implementada en `sql/01_episodios/_episodios.sql`:
 
 ## Interpretación clave
 
-En la mayoría de los casos, el registro de urgencias termina exactamente cuando empieza la hospitalización. Por eso **la espera de cama (boarding) queda dentro del tiempo en urgencias** de los pacientes hospitalizados. La diferencia entre el tiempo en urgencias de hospitalizados y de dados de alta es un indicador del bloqueo por falta de camas.
+Cuando un paciente se hospitaliza, el tiempo entre su llegada y su ingreso a cama incluye la **espera de cama (boarding)**. Por eso la diferencia entre el tiempo en urgencias de hospitalizados y de dados de alta es un indicador del bloqueo por falta de camas.
+
+Hay que medirla bien: la consulta 24 mostró que en bastantes hospitalizados el registro de urgencias **sigue abierto después del ingreso a cama**. Con la definición de arriba (fin de urgencias = último fin de un segmento de urgencias), ese tiempo ya en cama se cuenta como urgencias. Para comparar destinos se usa el tiempo en urgencias **recortado al ingreso**: `LEAST(fin_urg, ini_hosp) − llegada` (consulta 25, `28_tiempos_semanales.sql` y `Cuellos_botella` con `recortar_al_siguiente: true`). La cifra de la consulta 20 sin recorte sobrestima la espera de los hospitalizados.
 
 ## Ocupación hora a hora
 
-`sql/01_episodios/23_ocupacion_por_hora.sql` calcula el censo al cierre de cada hora (entradas acumuladas − salidas acumuladas), para urgencias (llegada → fin de urgencias) y hospitalización (todas las estancias con 9201). Los primeros días de la serie subestiman la ocupación porque no cuentan a quienes ya estaban adentro; se descartan como calentamiento.
+- `23_ocupacion_por_hora.sql` calcula el censo al cierre de cada hora (entradas acumuladas − salidas acumuladas), para urgencias (llegada → fin de urgencias) y hospitalización (todas las estancias con 9201).
+- `25_ocupacion_ajustada.sql` es la versión que se usa: corta urgencias al ingreso a cama (evita contar al mismo paciente en dos sitios) y excluye urgencias de más de 7 días y hospitalizaciones de más de 90 (probables registros sin cerrar).
+- Los primeros días de la serie subestiman la ocupación porque no cuentan a quienes ya estaban adentro; se descartan como calentamiento.
+- La ocupación absoluta todavía no es comparable con la capacidad (58 cubículos, 64 camas): la base parece cubrir más de lo que esa capacidad describe. Los patrones relativos sí son confiables.
+
+## Episodios irregulares
+
+En unos pocos episodios urgencias reaparece después de la hospitalización (urgencias → hospitalización → urgencias) o la hospitalización va antes que urgencias. El SQL y `Cuellos_botella` los miden distinto (el SQL toma de la primera llegada al último fin de urgencias; la herramienta suma cada estancia). Fuera de ellos coinciden exacto (`Cuellos_botella/tests/test_equivalencia_sql.py`). Qué son en la realidad (registro abierto, traslado de vuelta o error) está pendiente de decidir.
+
+## Series de tiempo
+
+`26_series_horarias.sql` deja las llegadas, ingresos, altas y censos en una rejilla horaria completa (las horas sin eventos salen con 0; la 21 solo trae las horas con llegadas). `series_tiempo/` las usa para el reporte de pronóstico.
 
 ## Limitaciones
 
