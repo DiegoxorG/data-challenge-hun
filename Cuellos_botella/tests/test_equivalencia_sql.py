@@ -87,10 +87,10 @@ def _python(eng, tmp: Path, **cambios):
 
 
 def _irregulares(epi: pd.DataFrame) -> set:
-    """Episodios que no son 'una zona' ni 'urgencias → hospitalización'."""
-    regular = (epi["n_estancias"] == 1) | ((epi["n_estancias"] == 2) & (epi["zona_inicial"] == "urgencias")
-                                           & (epi["zona_final"] == "hospitalizacion"))
-    return set(epi.loc[~regular, "episodio"])
+    """Episodios irregulares: la columna que calcula episodios.correr con la misma función que
+    alimenta el resumen seguro. Con el orden urgencias → hospitalización, los regulares son
+    'una zona' o 'urgencias → hospitalización'."""
+    return set(epi.loc[epi["irregular"], "episodio"])
 
 
 def test_episodios_iguales(eng, tmp_path):

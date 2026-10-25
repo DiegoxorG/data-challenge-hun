@@ -177,9 +177,9 @@ def resumir(t: Tablas) -> None:
     if er is not None:
         er = er.set_index("indicador")["valor"]
         print(f"  episodios de una sola zona: {cuanto(er.get('p_episodios_una_estancia'))}")
-        if "p_episodios_zona_repetida" in er:
-            print(f"  episodios irregulares (una zona aparece más de una vez): "
-                  f"{cuanto(er.get('p_episodios_zona_repetida'))}")
+        if "p_episodios_irregulares" in er:
+            print(f"  episodios irregulares (una zona se repite o el flujo retrocede, p. ej. hospitalización → "
+                  f"urgencias): {cuanto(er.get('p_episodios_irregulares'))}")
         print(f"  estancias que siguen abiertas cuando empieza la siguiente: {cuanto(er.get('p_estancias_recortables'))}")
         print(f"  recorte aplicado en el reporte: {'sí' if er.get('recorte_aplicado') == 1 else 'no'}")
     st = t("secuencias_top")

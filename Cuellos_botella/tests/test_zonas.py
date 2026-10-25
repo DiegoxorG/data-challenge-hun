@@ -64,6 +64,18 @@ def test_llegada_y_atencion_son_una_estancia(tmp_path):
     assert est.loc[0, "min_original"] == 180
 
 
+def test_episodios_irregulares():
+    orden = ["urgencias", "hospitalizacion"]
+    secuencias = {0: ["urgencias"], 1: ["hospitalizacion"], 2: ["urgencias", "hospitalizacion"],
+                  3: ["urgencias", "hospitalizacion", "urgencias"],   # zona repetida
+                  4: ["hospitalizacion", "urgencias"],                # el flujo retrocede
+                  5: ["otra", "otra"], 6: ["otra", "urgencias"]}      # zona fuera del orden
+    est = pd.DataFrame([(ep, i, z) for ep, zs in secuencias.items() for i, z in enumerate(zs)],
+                       columns=["episodio", "paso", "zona"])
+    irr = episodios.episodios_irregulares(est, orden)
+    assert irr.to_dict() == {0: False, 1: False, 2: False, 3: True, 4: True, 5: True, 6: False}
+
+
 def test_excluir_estancias_largas_no_toca_episodios(tmp_path):
     cfg = cfg_de(tmp_path, "excluir_estancias_largas: {urgencias: 7}\n")
     df = crudo([(1, 3045729, t(0), t(24 * 8)),            # 8 días en urgencias: se excluye

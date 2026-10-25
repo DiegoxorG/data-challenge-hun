@@ -73,6 +73,20 @@ def construir_estancias(seg: pd.DataFrame) -> pd.DataFrame:
     return est
 
 
+def episodios_irregulares(est: pd.DataFrame, orden: list[str]) -> pd.Series:
+    """True por episodio si su secuencia de estancias no avanza en el orden del flujo:
+    una zona se repite (urgencias → hospitalización → urgencias) o una zona aparece después
+    de otra que va más adelante (hospitalización → urgencias). `orden` es el orden de las
+    zonas en el flujo (el de zonas_agrupar en el config); las zonas fuera de él solo cuentan
+    si se repiten. Es la única definición: el resumen seguro y el test de equivalencia la usan."""
+    d = est.sort_values(["episodio", "paso"])
+    g = d.groupby("episodio", sort=True)
+    repetida = g["zona"].nunique() < g.size()
+    rango = d["zona"].map({z: i for i, z in enumerate(orden)}).astype(float)
+    retrocede = (rango < rango.groupby(d["episodio"]).cummax()).groupby(d["episodio"]).any()
+    return (repetida | retrocede.reindex(repetida.index, fill_value=False)).rename("irregular")
+
+
 def construir_episodios(est: pd.DataFrame, etiquetas: dict) -> pd.DataFrame:
     g = est.groupby("episodio", sort=True)
     epi = pd.DataFrame({
@@ -108,6 +122,8 @@ def correr(ctx: Contexto, reg: Registro) -> None:
     ctx.est = est
     ctx.epi = construir_episodios(est, ctx.etiquetas)
     epi = ctx.epi
+    # Con todas las estancias, antes de excluir las largas
+    epi["irregular"] = episodios_irregulares(est, list(cfg.zonas_agrupar)).reindex(epi["episodio"]).to_numpy()
 
     modo = (f"columna de caso '{cfg.caso}'" if cfg.caso else f"umbral de {cfg.umbral_min:g} min entre segmentos")
     reg.tabla(SEC, "episodios_resumen", pd.DataFrame([
@@ -115,10 +131,9 @@ def correr(ctx: Contexto, reg: Registro) -> None:
         {"indicador": "estancias", "valor": len(est)},
         {"indicador": "segmentos", "valor": len(ctx.seg)},
         {"indicador": "p_episodios_una_estancia", "valor": float((epi["n_estancias"] == 1).mean())},
-        # Una zona aparece más de una vez (p. ej. urgencias → hospitalización → urgencias). Ahí
-        # _episodios.sql y la 25 miden distinto que esta herramienta (ver test_equivalencia_sql.py).
-        {"indicador": "p_episodios_zona_repetida",
-         "valor": float((est.groupby("episodio")["zona"].nunique() < est.groupby("episodio").size()).mean())},
+        # Ahí _episodios.sql y la 25 miden distinto que esta herramienta (ver test_equivalencia_sql.py)
+        {"indicador": "p_episodios_irregulares",
+         "valor": float(epi["irregular"].mean())},
         {"indicador": "p_estancias_recortables", "valor": float(est["recortada"].mean())},
         {"indicador": "recorte_aplicado", "valor": int(cfg.recortar_al_siguiente)},
     ]), f"Totales de episodios, estancias y segmentos. Episodios definidos por {modo}.")
