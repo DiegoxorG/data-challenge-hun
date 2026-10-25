@@ -49,6 +49,13 @@ def test_tabla_pegada_dentro_de_un_notebook():
     assert cnd.check("n.ipynb", nb([code("x = 1")])) == []
 
 
+def test_codigo_con_muchas_comas_no_es_una_tabla():
+    linea = 'fig.add_scatter(x=d.index, y=m7, mode="lines", line=dict(color=C1, width=1.5), name="media")\n'
+    assert cnd.check("graficas.py", (linea * 80).encode()) == []
+    filas = "\n".join(f"{i},2024-01-0{i % 9 + 1},9203,{i * 3},alta" for i in range(60))
+    assert any("forma de tabla" in p for p in cnd.check("datos.py", f'X = """\n{filas}\n"""'.encode()))
+
+
 def test_reporte_generado_con_la_marca():
     marca = '<meta name="hun-' + 'datos" content="derivado">'
     assert any("hun-datos" in p for p in cnd.check("algo.html", f"<html><head>{marca}</head></html>".encode()))

@@ -63,6 +63,16 @@ PLACEHOLDERS = re.compile(r"(cambiar|change|xxx|\*\*\*|tu_|your_|<|\$\{|os\.envi
 MARCA_DERIVADO = re.compile(r"""<meta\s+name=["']hun-datos["']""", re.I)
 
 DELIM_ROW = re.compile(r"^[^\n]*?(?:[,;\t|][^,;\t|\n]*){4,}$")
+# Un campo "con cara de dato": número, fecha u hora (1, 9203, 2024-01-02, 07:30, 3.5)
+CAMPO_DATO = re.compile(r"^\s*['\"]?[-+]?\d[\d.:/\- ]*['\"]?\s*$")
+
+
+def parece_fila_de_datos(linea: str) -> bool:
+    """Línea delimitada con al menos 3 campos que parecen datos. Así una fila de CSV pegada
+    cuenta, pero una línea de código con muchas comas (argumentos de una función) no."""
+    if not DELIM_ROW.match(linea):
+        return False
+    return sum(1 for c in re.split(r"[,;\t|]", linea) if CAMPO_DATO.match(c)) >= 3
 TEXT_EXT = {".py", ".sql", ".md", ".txt", ".r", ".rmd", ".qmd", ".json", ".yml", ".yaml",
             ".toml", ".ini", ".cfg", ".dax", ".m", ".tmdl", ".html", ".js", ".ts", ".ps1", ".psm1",
             ".sh", ".bat", ".cmd", ".xml", ".svg", ".css", ".example", ""}
@@ -136,7 +146,7 @@ def check(path: str, data: bytes) -> list[str]:
             problems.append("reporte generado a partir de datos del HUN (marca hun-datos)")
         # En notebooks se mira el código y el markdown de las celdas (no el JSON)
         cuerpo = nb_fuente if p.suffix.lower() == ".ipynb" else text
-        rows = sum(1 for ln in cuerpo.splitlines() if DELIM_ROW.match(ln))
+        rows = sum(1 for ln in cuerpo.splitlines() if parece_fila_de_datos(ln))
         if rows > DELIMITED_ROWS_LIMIT:
             problems.append(f"{rows} líneas con forma de tabla: ¿datos pegados?")
     return problems
