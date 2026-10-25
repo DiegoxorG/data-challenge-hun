@@ -59,6 +59,7 @@ dashboard/                  Power BI como .pbit o PBIP, nunca .pbix
 - Los reportes generados llevan la marca `hun-datos` y el hook los bloquea; `muestra_carriles > 0` (episodios individuales) está bloqueado salvo `--permitir-carriles`.
 - `python -m series_tiempo` corre las consultas agregadas 26-28 (26 = rejilla horaria completa de llegadas, ingresos, altas y censos como la 25; 27 = llegadas diarias por sexo, edad y destino; 28 = tiempos semanales con y sin recorte, solo grupos de 10+), agrega el calendario colombiano y deja en `DATA_DIR/series_tiempo` el reporte `reporte_series.html` y las series en parquet (`series_tiempo.cargar()`). Su resumen seguro: `python -m series_tiempo.resumen_seguro`. Son gráficas exploratorias: el modelado lo hace Sebastián.
 - La 21 solo trae las horas con llegadas (hay que rellenar con 0); para series usa la 26.
+- `main.py` (o doble clic en `ejecutar.bat`) es el menú para el equipo: revisa `.env` y VPN sin imprimir valores, corre series y/o cuellos de botella, abre el reporte y muestra el resumen seguro. Se conecta a la base: Claude Code no lo corre (está en las reglas deny).
 
 ## 4. Esquema real (7 tablas; no hay death, drug_exposure, observation, provider, etc.)
 
