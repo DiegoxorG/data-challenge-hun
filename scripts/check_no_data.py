@@ -57,6 +57,9 @@ CRED_PATTERNS = [
 # Valores de ejemplo que no cuentan como credencial real
 PLACEHOLDERS = re.compile(r"(cambiar|change|xxx|\*\*\*|tu_|your_|<|\$\{|os\.environ|getenv)", re.I)
 
+# Marca que llevan los reportes generados con datos (p. ej. Cuellos_botella/reporte.py)
+MARCA_DERIVADO = re.compile(r"""<meta\s+name=["']hun-datos["']""", re.I)
+
 DELIM_ROW = re.compile(r"^[^\n]*?(?:[,;\t|][^,;\t|\n]*){4,}$")
 TEXT_EXT = {".py", ".sql", ".md", ".txt", ".r", ".rmd", ".qmd", ".json", ".yml", ".yaml",
             ".toml", ".ini", ".cfg", ".dax", ".m", ".tmdl", ".html", ".js", ".ts", ""}
@@ -119,6 +122,8 @@ def check(path: str, data: bytes) -> list[str]:
                 if not PLACEHOLDERS.search(m.group(0)):
                     line = text.count("\n", 0, m.start()) + 1
                     problems.append(f"{label} (línea {line})")
+        if MARCA_DERIVADO.search(text):
+            problems.append("reporte generado a partir de datos del HUN (marca hun-datos)")
         if p.suffix.lower() != ".ipynb":
             rows = sum(1 for ln in text.splitlines() if DELIM_ROW.match(ln))
             if rows > DELIMITED_ROWS_LIMIT:

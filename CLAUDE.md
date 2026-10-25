@@ -41,6 +41,8 @@ Trabajamos con datos reales de pacientes del Hospital Universidad del Norte (HUN
 docs/                       PROTOCOLO_DATOS.md, METODOLOGIA_EPISODIOS.md
 sql/00_exploracion/         consultas de exploración (00-18)
 sql/01_episodios/           _episodios.sql (bloque común) + consultas 20-25
+sql/02_cuellos_botella/     entrada.sql (nivel paciente, @nivel_paciente: solo se lee a memoria)
+Cuellos_botella/            herramienta exploratoria de Joseph (reporte HTML + tablas agregadas), ver su README
 src/hun/                    config.py (.env + DATA_DIR validada), db.py (conexión), extract.py
 scripts/                    check_no_data.py, setup.*, resumen_seguro*.py, generar_sintetico.py
 notebooks/                  análisis, SIEMPRE sin outputs
@@ -50,6 +52,9 @@ dashboard/                  Power BI como .pbit o PBIP, nunca .pbix
 - `python -m hun.extract sql\...\archivo.sql` corre una consulta y guarda el resultado en `DATA_DIR/<nombre>.parquet`; en consola solo imprime filas y columnas. `hun.extract.load("<nombre>")` lo carga.
 - `extract.py` envuelve la consulta en `sqlalchemy.text()` (los `%` de `ILIKE` no rompen psycopg2) y soporta `-- @include archivo.sql` para reutilizar bloques. Las consultas con `@include` no corren tal cual en DBeaver: hay que pegar el bloque incluido.
 - Patrón para compartir resultados con Claude: por cada lote de consultas hay un `scripts/resumen_seguro_N.py` que lee los extractos y los imprime en palabras/franjas. Al crear consultas nuevas, crea también su resumen seguro.
+- Consultas que devuelven una fila por paciente o segmento llevan la línea `-- @nivel_paciente`; `hun.extract` se niega a guardarlas. Se leen a memoria, p. ej. `python -m Cuellos_botella --config Cuellos_botella/config.yaml --entrada sql/02_cuellos_botella/entrada.sql`, y lo que queda en disco son tablas agregadas. Su resumen seguro: `python -m Cuellos_botella.resumen_seguro`.
+- `Cuellos_botella/config.yaml` reproduce `_episodios.sql` y la consulta 25 (solo 9203/3045729/9201, urgencias = 9203 + 3045729, recorte al ingreso, sin urgencias > 7 días ni hospitalización > 90). `Cuellos_botella/tests/test_equivalencia_sql.py` lo comprueba contra la base sintética. **Si el equipo cambia una definición, hay que cambiarla en el SQL y en el config.**
+- Los reportes generados llevan la marca `hun-datos` y el hook los bloquea; `muestra_carriles > 0` (episodios individuales) está bloqueado salvo `--permitir-carriles`.
 
 ## 4. Esquema real (7 tablas; no hay death, drug_exposure, observation, provider, etc.)
 
@@ -85,6 +90,7 @@ dura 0 o <15 min            típico 1-4 h, cola larga         típico 1-7 días
 - Resultados en palabras:
   - Casi todos los episodios de urgencias terminan en alta; se hospitalizan pocos.
   - **Hallazgo principal: los hospitalizados pasan más de 3 veces más tiempo en urgencias que los de alta** (la espera de cama queda dentro del tiempo en urgencias). Es la pista para las recomendaciones: el cuello de botella parece ser el acceso a cama, no la atención.
+  - ⚠️ **Por verificar:** ese "más de 3 veces" sale de `min_urg` de la 20, que NO recorta urgencias al ingreso a cama. Como en bastantes hospitalizados el registro de urgencias sigue abierto después del ingreso (ver diagnóstico de ocupación), parte de ese tiempo es tiempo en cama. Hay que repetir la comparación con recorte (Cuellos_botella con `recortar_al_siguiente: true`: tabla `comparativa_recorte` y `rel_destino`) antes de usar la cifra en el documento.
   - Episodios de alta: distribución bimodal; la mayoría dura menos de 15 min (¿registro/remisión de triaje IV-V a EPS? por confirmar).
   - Serie de llegadas por hora: continua, sin días vacíos, patrón diario fuerte (hora pico > 3 veces la más tranquila), semanal moderado. **Los últimos meses disponibles (2026) están incompletos: excluirlos de modelos.**
   - El tiempo en urgencias varía 1.5-3 veces según la hora de llegada.
@@ -99,6 +105,7 @@ dura 0 o <15 min            típico 1-4 h, cola larga         típico 1-7 días
 1. Umbral de episodio: ¿unir urgencia → hospitalización aunque haya horas de hueco (24-48 h)?
 2. Tratamiento de contactos < 15 min y de la cola larga (> 7 días).
 3. Capacidades reales a usar.
+3b. Episodios irregulares (urgencias reaparece después de la hospitalización): ¿registro abierto, traslado de vuelta a urgencias o error? Hoy el SQL y la herramienta los miden distinto (ver README de Cuellos_botella). El resumen seguro dice cuántos hay.
 4. Reparto del trabajo: pronóstico (llegadas/ocupación por hora), simulación de escenarios (p. ej. agilizar ingreso a cama, reforzar franjas pico), dashboard Power BI, documento y presentación.
 
 Preguntas enviadas/por enviar a los organizadores: acceso por VPN desde equipos propios, descarga de extractos, OneDrive institucional, Power BI directo a la BD, uso simultáneo de la VPN, uso de IA con agregados, significado de 9203/3045729/581479 y si existe triaje, capacidad real y sedes cubiertas, qué son los contactos < 15 min. **Mientras no respondan: trabajar con agregados, sin descargar datos por paciente.**

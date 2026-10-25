@@ -115,6 +115,10 @@ def correr(ctx: Contexto, reg: Registro) -> None:
         {"indicador": "estancias", "valor": len(est)},
         {"indicador": "segmentos", "valor": len(ctx.seg)},
         {"indicador": "p_episodios_una_estancia", "valor": float((epi["n_estancias"] == 1).mean())},
+        # Una zona aparece más de una vez (p. ej. urgencias → hospitalización → urgencias). Ahí
+        # _episodios.sql y la 25 miden distinto que esta herramienta (ver test_equivalencia_sql.py).
+        {"indicador": "p_episodios_zona_repetida",
+         "valor": float((est.groupby("episodio")["zona"].nunique() < est.groupby("episodio").size()).mean())},
         {"indicador": "p_estancias_recortables", "valor": float(est["recortada"].mean())},
         {"indicador": "recorte_aplicado", "valor": int(cfg.recortar_al_siguiente)},
     ]), f"Totales de episodios, estancias y segmentos. Episodios definidos por {modo}.")
@@ -146,6 +150,30 @@ def correr(ctx: Contexto, reg: Registro) -> None:
     comparar_recorte(ctx, reg)
     if cfg.muestra_carriles > 0:
         carriles(ctx, reg)
+    excluir_largas(ctx, reg)
+
+
+def excluir_largas(ctx: Contexto, reg: Registro) -> None:
+    """Saca del resto del reporte (censo, duraciones, transiciones…) las estancias más largas
+    que el límite de su zona, como la consulta 25 con urgencias > 7 días y hospitalización > 90.
+    Los episodios ya están construidos, así que no cambian: un episodio con una estancia
+    excluida sigue contando como episodio."""
+    lim = ctx.cfg.excluir_estancias_largas
+    if not lim:
+        return
+    est = ctx.est
+    tope = est["zona"].map(lim).astype(float) * 1440   # minutos; NaN = zona sin límite
+    fuera = (est["min"] > tope).fillna(False).to_numpy(dtype=bool)
+    filas = []
+    for z, dias in lim.items():
+        m = (est["zona"] == z).to_numpy()
+        filas.append({"zona": z, "nombre": ctx.nombre(z), "limite_dias": dias, "estancias": int(m.sum()),
+                      "excluidas": int((m & fuera).sum()),
+                      "p_excluidas": float((m & fuera).sum() / m.sum()) if m.sum() else float("nan")})
+    reg.tabla(SEC, "estancias_excluidas", pd.DataFrame(filas),
+              "Estancias más largas que el límite de su zona (excluir_estancias_largas), que quedan fuera del "
+              "censo y de las demás secciones. La duración usada es la del resto del reporte (con o sin recorte).")
+    ctx.est = est[~fuera].reset_index(drop=True)
 
 
 def comparar_recorte(ctx: Contexto, reg: Registro) -> None:

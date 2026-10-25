@@ -1,6 +1,9 @@
 """Uso:
-    python -m Cuellos_botella --config Cuellos_botella/config.yaml --entrada <archivo.csv|parquet> [--salida <carpeta>]
+    python -m Cuellos_botella --config Cuellos_botella/config.yaml --entrada <archivo.sql|csv|parquet> [--salida <carpeta>]
 
+Con un .sql (recomendado: sql/02_cuellos_botella/entrada.sql) lee directo de la base por la
+conexión del .env y deja los datos por paciente solo en memoria; lo que se escribe en disco
+son las tablas agregadas y el reporte.
 Sin --salida escribe en DATA_DIR/cuellos_botella_salidas. Nunca escribe dentro del repo.
 En consola solo imprime avance y avisos genéricos, sin cifras de los datos.
 """
@@ -67,13 +70,20 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m Cuellos_botella", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config", required=True)
-    ap.add_argument("--entrada", required=True)
+    ap.add_argument("--entrada", required=True, help=".sql (se lee de la base a memoria), .csv o .parquet")
     ap.add_argument("--salida", default=None)
     ap.add_argument("--estricto", action="store_true", help="detenerse ante el primer error de una sección")
+    ap.add_argument("--permitir-carriles", action="store_true",
+                    help="permite muestra_carriles > 0, que guarda en el reporte episodios individuales")
     a = ap.parse_args(argv)
 
     t_ini = time.time()
     cfg = cargar(a.config)
+    if cfg.muestra_carriles > 0 and not a.permitir_carriles:
+        print("muestra_carriles > 0 dibuja episodios de pacientes individuales en el reporte (nivel paciente "
+              "en disco). Mientras el HUN no autorice guardar datos por paciente, déjalo en 0. Si de verdad "
+              "lo necesitas para una revisión local, agrega --permitir-carriles.")
+        return 2
     salida = validar_salida(a.salida)
     print(f"Salida: {salida}")
     reg = analizar(cfg, a.entrada, salida, a.estricto)

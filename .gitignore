@@ -119,3 +119,6 @@ desktop.ini
 
 # --- Salidas de Cuellos_botella (van en DATA_DIR; esto es por si acaso) ----
 cuellos_botella_salidas/
+
+# Reportes generados con datos (llevan la marca hun-datos; el hook también los bloquea)
+reporte.html

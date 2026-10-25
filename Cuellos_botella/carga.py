@@ -13,7 +13,9 @@ def leer(ruta: str | Path, cfg: Config) -> pd.DataFrame:
     ruta = Path(ruta)
     cols = cfg.columnas_entrada
     suf = ruta.suffix.lower()
-    if suf == ".parquet":
+    if suf == ".sql":
+        df = leer_sql(ruta)
+    elif suf == ".parquet":
         df = pd.read_parquet(ruta, columns=cols)
     elif suf in (".csv", ".txt"):
         try:
@@ -21,11 +23,25 @@ def leer(ruta: str | Path, cfg: Config) -> pd.DataFrame:
         except (ImportError, ValueError):
             df = pd.read_csv(ruta, usecols=cols, low_memory=False)
     else:
-        raise ValueError(f"Formato no soportado: {suf} (usa .csv o .parquet)")
+        raise ValueError(f"Formato no soportado: {suf} (usa .sql, .csv o .parquet)")
     faltan = [c for c in cols if c not in df.columns]
     if faltan:
         raise ValueError(f"La entrada no tiene las columnas configuradas: {faltan}")
-    return df
+    return df[cols]
+
+
+def leer_sql(ruta: Path, engine=None) -> pd.DataFrame:
+    """Corre un .sql (con `-- @include`) contra la base y deja el resultado SOLO en memoria:
+    no escribe ningún archivo por paciente. Usa la conexión del .env (hun.db) salvo que se
+    pase otro engine (los tests usan un PostgreSQL local sintético)."""
+    from sqlalchemy import text
+
+    from hun.extract import read_sql
+    if engine is None:
+        from hun.db import engine as crear
+        engine = crear()
+    with engine.connect() as con:
+        return pd.read_sql_query(text(read_sql(ruta)), con)
 
 
 def _fecha(s: pd.Series) -> pd.Series:
@@ -47,8 +63,8 @@ def normalizar(crudo: pd.DataFrame, cfg: Config) -> tuple[pd.DataFrame, pd.DataF
     tipos = pd.DataFrame(tipos)
 
     df = pd.DataFrame({
-        "persona": crudo[cfg.persona].astype("string"),
-        "zona": crudo[cfg.zona].astype("string"),
+        "persona": _codigo(crudo[cfg.persona]),
+        "zona": _codigo(crudo[cfg.zona]),
         "inicio": _fecha(crudo[cfg.inicio]),
         "fin": _fecha(crudo[cfg.fin]),
     })
@@ -74,9 +90,39 @@ def normalizar(crudo: pd.DataFrame, cfg: Config) -> tuple[pd.DataFrame, pd.DataF
         df = df[df["inicio"] >= pd.Timestamp(cfg.desde)]
     if cfg.hasta:
         df = df[df["inicio"] < pd.Timestamp(cfg.hasta)]
+    # Filtros por código de la entrada, antes de agrupar
+    if cfg.zonas_incluir:
+        df = df[df["zona"].isin(cfg.zonas_incluir)]
     if cfg.zonas_excluir:
         df = df[~df["zona"].isin(cfg.zonas_excluir)]
+    if cfg.zonas_agrupar:
+        df = agrupar_zonas(df, cfg)
     return df.reset_index(drop=True), tipos
+
+
+def agrupar_zonas(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
+    """Reemplaza los códigos agrupados por el nombre del grupo (y su etiqueta). Guarda el código
+    original en `zona_original`. Las zonas fuera de todo grupo quedan como estaban."""
+    mapa = {c: g for g, gr in cfg.zonas_agrupar.items() for c in gr.codigos}
+    etq = {g: gr.etiqueta for g, gr in cfg.zonas_agrupar.items()}
+    df = df.copy()
+    df["zona_original"] = df["zona"]
+    nueva = df["zona"].map(mapa)
+    agrupada = nueva.notna()
+    df["zona"] = nueva.where(agrupada, df["zona"]).astype("string")
+    df["etiqueta"] = df["zona"].map(etq).where(agrupada, df["etiqueta"]).astype("string")
+    return df
+
+
+def _codigo(s: pd.Series) -> pd.Series:
+    """Identificadores como texto. Si la columna es numérica con valores enteros (p. ej. un
+    concept_id que llegó como float por tener nulos), evita el '.0' para que '9203' coincida
+    con lo que se escribe en el config."""
+    if pd.api.types.is_numeric_dtype(s) and not pd.api.types.is_bool_dtype(s):
+        x = pd.to_numeric(s, errors="coerce")
+        if bool(((x.dropna() % 1) == 0).all()):
+            return x.astype("Int64").astype("string")
+    return s.astype("string")
 
 
 def etiquetas_zona(df: pd.DataFrame) -> dict[str, str]:

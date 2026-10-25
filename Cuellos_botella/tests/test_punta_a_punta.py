@@ -46,13 +46,24 @@ def test_punta_a_punta(tmp_path, formato):
     cfg = tmp_path / "config.yaml"
     cfg.write_text(CONFIG, encoding="utf-8")
     salida = tmp_path / "salida"
-    assert main(["--config", str(cfg), "--entrada", str(entrada), "--salida", str(salida), "--estricto"]) == 0
+    assert main(["--config", str(cfg), "--entrada", str(entrada), "--salida", str(salida), "--estricto",
+                 "--permitir-carriles"]) == 0
     html = (salida / "reporte.html").read_text(encoding="utf-8")
     for seccion in "ABCDEFGHI":
         assert f"{seccion}. " in html
     for tabla in ["calidad_resumen", "censo_horario", "transiciones_matriz", "rel_censo", "pareto_zona",
                   "comparativa_recorte", "little_zona_mes", "atributo_edad_duracion"]:
         assert (salida / "tablas" / f"{tabla}.csv").exists()
+
+
+def test_carriles_sin_permiso_se_bloquean(tmp_path):
+    entrada = tmp_path / "eventos.csv"
+    registro(n=20).to_csv(entrada, index=False)
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(CONFIG, encoding="utf-8")   # trae muestra_carriles: 10
+    salida = tmp_path / "salida"
+    assert main(["--config", str(cfg), "--entrada", str(entrada), "--salida", str(salida)]) == 2
+    assert not (salida / "reporte.html").exists()
 
 
 def test_salida_dentro_del_repo_se_rechaza():

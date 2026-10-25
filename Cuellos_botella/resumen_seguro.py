@@ -177,6 +177,9 @@ def resumir(t: Tablas) -> None:
     if er is not None:
         er = er.set_index("indicador")["valor"]
         print(f"  episodios de una sola zona: {cuanto(er.get('p_episodios_una_estancia'))}")
+        if "p_episodios_zona_repetida" in er:
+            print(f"  episodios irregulares (una zona aparece más de una vez): "
+                  f"{cuanto(er.get('p_episodios_zona_repetida'))}")
         print(f"  estancias que siguen abiertas cuando empieza la siguiente: {cuanto(er.get('p_estancias_recortables'))}")
         print(f"  recorte aplicado en el reporte: {'sí' if er.get('recorte_aplicado') == 1 else 'no'}")
     st = t("secuencias_top")
@@ -184,6 +187,11 @@ def resumir(t: Tablas) -> None:
         print("  secuencias más frecuentes:")
         for _, f in st.head(6).iterrows():
             print(f"    {f['secuencia']}: {cuanto(f['proporcion'])}")
+    ee = t("estancias_excluidas")
+    if ee is not None:
+        for _, f in ee.iterrows():
+            print(f"  {n(f['zona'])}: estancias de más de {f['limite_dias']:g} días excluidas del reporte: "
+                  f"{cuanto(f['p_excluidas'])}")
     cr = t("comparativa_recorte")
     if cr is not None:
         print("  efecto del recorte (con recorte frente a sin recorte):")

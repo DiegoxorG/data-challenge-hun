@@ -23,6 +23,13 @@ class Atributo:
 
 
 @dataclass
+class Grupo:
+    """Varias zonas de la entrada que se analizan como una sola (p. ej. llegada + atención = urgencias)."""
+    codigos: list[str]
+    etiqueta: str
+
+
+@dataclass
 class Config:
     persona: str
     zona: str
@@ -34,7 +41,10 @@ class Config:
     edad_desde_anio_nacimiento: str | None = None
     umbral_min: float = 60.0
     recortar_al_siguiente: bool = False
+    zonas_incluir: list[str] = field(default_factory=list)       # vacío = todas las zonas
     zonas_excluir: list[str] = field(default_factory=list)
+    zonas_agrupar: dict[str, Grupo] = field(default_factory=dict)  # código final -> grupo
+    excluir_estancias_largas: dict[str, float] = field(default_factory=dict)  # zona final -> días
     capacidades: dict[str, float] = field(default_factory=dict)
     desde: str | None = None
     hasta: str | None = None
@@ -64,6 +74,22 @@ class Config:
 
 def _texto(v) -> str | None:
     return None if v in (None, "") else str(v)
+
+
+def _grupos(raw: dict) -> dict[str, Grupo]:
+    """{grupo: {codigos: [...], etiqueta: "..."}} -> {grupo: Grupo}; un código no puede estar en dos grupos."""
+    out: dict[str, Grupo] = {}
+    vistos: dict[str, str] = {}
+    for nombre, g in raw.items():
+        if not isinstance(g, dict) or not g.get("codigos"):
+            raise ValueError(f"config: el grupo {nombre!r} de zonas_agrupar necesita una lista 'codigos'")
+        codigos = [str(c) for c in g["codigos"]]
+        for c in codigos:
+            if c in vistos:
+                raise ValueError(f"config: la zona {c!r} está en dos grupos ({vistos[c]!r} y {nombre!r})")
+            vistos[c] = str(nombre)
+        out[str(nombre)] = Grupo(codigos=codigos, etiqueta=str(g.get("etiqueta") or nombre))
+    return out
 
 
 def cargar(ruta: str | Path) -> Config:
@@ -96,7 +122,10 @@ def cargar(ruta: str | Path) -> Config:
         edad_desde_anio_nacimiento=_texto(raw.get("edad_desde_anio_nacimiento")),
         umbral_min=float(ep.get("umbral_min", 60)),
         recortar_al_siguiente=bool(ep.get("recortar_al_siguiente", False)),
+        zonas_incluir=[str(z) for z in raw.get("zonas_incluir") or []],
         zonas_excluir=[str(z) for z in raw.get("zonas_excluir") or []],
+        zonas_agrupar=_grupos(raw.get("zonas_agrupar") or {}),
+        excluir_estancias_largas={str(k): float(v) for k, v in (raw.get("excluir_estancias_largas") or {}).items()},
         capacidades={str(k): float(v) for k, v in (raw.get("capacidades") or {}).items()},
         desde=_texto(fechas.get("desde")), hasta=_texto(fechas.get("hasta")),
     )

@@ -1,6 +1,9 @@
 # Configuración de la herramienta de cuellos de botella.
 # Solo nombra columnas y parámetros; las zonas se descubren de los datos.
-# Este ejemplo usa la forma de visit_detail aplanada con person y visit_occurrence.
+# Este ejemplo usa la forma de visit_detail aplanada con person y visit_occurrence
+# (sql/02_cuellos_botella/entrada.sql) y reproduce las definiciones oficiales del equipo:
+# episodios = sql/01_episodios/_episodios.sql y ocupación = consulta 25.
+# Si el equipo cambia una decisión (umbral, recorte, límites), cámbienla aquí Y en el SQL.
 
 columnas:
   persona: person_id                         # obligatoria
@@ -18,11 +21,30 @@ edad_desde_anio_nacimiento: year_of_birth
 
 episodios:
   umbral_min: 60                 # hueco máximo entre segmentos de la misma persona para seguir en el episodio
-  recortar_al_siguiente: false   # true: si una estancia sigue abierta al empezar la siguiente, se corta ahí
+  recortar_al_siguiente: true    # true: si una estancia sigue abierta al empezar la siguiente, se corta ahí
+                                 # (como la 25: urgencias termina al empezar la hospitalización).
+                                 # La sección B compara siempre con y sin recorte.
 
-zonas_excluir: []                # códigos de zona (tal como vienen en la columna 'zona')
+# Filtros por código tal como viene en la columna 'zona' (antes de agrupar).
+# Solo los conceptos del flujo urgencias → cama, igual que _episodios.sql. Sin esto entran
+# 581479 (ambulatorio) y 0, que se pegan a los episodios de urgencias.
+zonas_incluir: ["9203", "3045729", "9201"]
+zonas_excluir: []
 
-capacidades: {}                  # {codigo_zona: capacidad}; solo dibuja una línea de referencia
+# Varias zonas que se analizan como una. 9203 (marca de llegada, dura 0 o minutos) y 3045729
+# (atención) son la misma estancia en urgencias, como en _episodios.sql (llegada → fin_urg).
+zonas_agrupar:
+  urgencias: {codigos: ["9203", "3045729"], etiqueta: "Urgencias"}
+  hospitalizacion: {codigos: ["9201"], etiqueta: "Hospitalización"}
+
+# Estancias más largas que esto (días, por zona ya agrupada) quedan fuera de todo el reporte
+# salvo de la construcción de episodios. Mismos cortes que la 25 (probables errores de registro).
+excluir_estancias_largas:
+  urgencias: 7
+  hospitalizacion: 90
+
+capacidades: {}                  # {zona: capacidad}; solo dibuja una línea de referencia.
+                                 # Vacío a propósito: la capacidad real está pendiente con el HUN.
 
 rango_fechas:
   desde: null                    # p. ej. "AAAA-MM-DD" (incluido)

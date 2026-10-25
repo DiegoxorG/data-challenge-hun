@@ -21,6 +21,13 @@ from .db import engine
 
 
 _INCLUDE = re.compile(r"^[ \t]*--[ \t]*@include[ \t]+(\S+)[ \t]*$", re.M)
+# Consultas que devuelven una fila por paciente o segmento: se leen a memoria (p. ej. con
+# Cuellos_botella), nunca se guardan en disco mientras no haya autorización por escrito.
+_NIVEL_PACIENTE = re.compile(r"^[ \t]*--[ \t]*@nivel_paciente\b", re.M)
+
+
+def es_nivel_paciente(query: str) -> bool:
+    return bool(_NIVEL_PACIENTE.search(query))
 
 
 def read_sql(sql_path: str | Path, _pila: tuple[Path, ...] = ()) -> str:
@@ -45,6 +52,9 @@ def read_sql(sql_path: str | Path, _pila: tuple[Path, ...] = ()) -> str:
 def run_sql_file(sql_path: str | Path, nombre: str | None = None) -> Path:
     sql_path = Path(sql_path)
     query = read_sql(sql_path)
+    if es_nivel_paciente(query):
+        raise SystemExit(f"{sql_path.name} está marcado como @nivel_paciente: no se guarda en disco. "
+                         "Úsalo como --entrada de Cuellos_botella, que lo lee a memoria.")
     out_dir = config.data_dir()  # valida que esté fuera del repo y de la nube
     nombre = nombre or sql_path.stem
     out = out_dir / f"{nombre}.parquet"

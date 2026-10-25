@@ -12,6 +12,10 @@ from plotly.offline import get_plotlyjs
 from .comun import Registro
 from .config import Config
 
+# Marca para que scripts/check_no_data.py bloquee el reporte en git. Se arma por partes para
+# que este archivo de código no lleve la marca literal (si no, el hook lo bloquearía a él).
+MARCA_DERIVADO = '<meta name="hun-' + 'datos" content="derivado">'
+
 CSS = """
 :root { color-scheme: light; --bg:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
         --line:#e1e0d9; --accent:#2a78d6; --warn:#fab219; }
@@ -79,6 +83,7 @@ def escribir(reg: Registro, cfg: Config, entrada: str) -> Path:
 
     doc = f"""<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+{MARCA_DERIVADO}<!-- marca: scripts/check_no_data.py bloquea este archivo en git -->
 <title>Cuellos de botella</title><style>{CSS}</style>
 <script type="text/javascript">{get_plotlyjs()}</script></head><body><div class="wrap">
 <h1>Cuellos de botella: vistas exploratorias</h1>
