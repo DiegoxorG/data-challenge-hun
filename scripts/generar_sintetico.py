@@ -20,6 +20,10 @@ Patrones que imita:
     seguida al fin de urgencias; a veces con hueco de horas o días.
   - 581479 "Ambulatory Rehabilitation Visit": eventos puntuales de duración 0.
   - visit_occurrence con inicio = fin y que agrupa episodios separados por días.
+  - Llegadas con perfil horario, algo más de demanda los lunes, estacionalidad anual
+    suave y una tendencia leve (todo inventado), para probar las series de tiempo.
+  - condition_occurrence, procedure_occurrence (solo fecha) y measurement con unos
+    pocos conceptos inventados, para que la guía de familiarización corra completa.
 """
 from __future__ import annotations
 
@@ -42,7 +46,20 @@ CONCEPTOS = [
     (0, "No matching concept", "Metadata", "None"),
     (8507, "MALE", "Gender", "Gender"),
     (8532, "FEMALE", "Gender", "Gender"),
+    (32817, "EHR", "Type Concept", "Type Concept"),
 ]
+# Conceptos clínicos de ejemplo. Son solo para probar: los IDs no tienen por qué coincidir con
+# el vocabulario OMOP real y las frecuencias y valores son inventados.
+DIAGNOSTICOS = [(4329041, "Pain", 0.30), (200219, "Abdominal pain", 0.25), (437663, "Fever", 0.20),
+                (201826, "Type 2 diabetes mellitus", 0.10), (320128, "Essential hypertension", 0.15)]
+PROCEDIMIENTOS = [(4163872, "Plain chest X-ray", 0.5), (4125350, "Ultrasonography of abdomen", 0.3),
+                  (4058336, "Electrocardiogram", 0.2)]
+LABORATORIOS = [(3000963, "Hemoglobin [Mass/volume] in Blood", 12.0, 2.0),
+                (3016723, "Creatinine [Mass/volume] in Serum or Plasma", 1.0, 0.4),
+                (3019550, "Sodium [Moles/volume] in Serum or Plasma", 139.0, 4.0)]
+CONCEPTOS += [(c, n, "Condition", "SNOMED") for c, n, _ in DIAGNOSTICOS]
+CONCEPTOS += [(c, n, "Procedure", "SNOMED") for c, n, _ in PROCEDIMIENTOS]
+CONCEPTOS += [(c, n, "Measurement", "LOINC") for c, n, _, _ in LABORATORIOS]
 
 DDL = """
 DROP SCHEMA IF EXISTS uninorte_omop CASCADE;
@@ -58,6 +75,14 @@ CREATE TABLE visit_occurrence (visit_occurrence_id int, person_id int, visit_con
 CREATE TABLE visit_detail (visit_detail_id int, visit_occurrence_id int, visit_detail_concept_id int,
                      visit_detail_start_datetime timestamp, visit_detail_end_datetime timestamp,
                      provider_id int);
+CREATE TABLE condition_occurrence (condition_occurrence_id int, person_id int, visit_occurrence_id int,
+                     condition_concept_id int, condition_start_datetime timestamp,
+                     condition_type_concept_id int);
+CREATE TABLE procedure_occurrence (procedure_occurrence_id int, person_id int, visit_occurrence_id int,
+                     procedure_concept_id int, procedure_date date);
+CREATE TABLE measurement (measurement_id int, person_id int, visit_occurrence_id int,
+                     measurement_concept_id int, measurement_datetime timestamp, value_as_number numeric,
+                     measurement_source_value_extended text);
 """
 
 # --- Protecciones: este script BORRA y recrea el esquema uninorte_omop. -------------------
@@ -118,8 +143,17 @@ _PERFIL_HORA = np.array([2, 1.5, 1, 1, 1, 1.5, 3, 5, 7, 8, 8, 7,
 _PERFIL_HORA /= _PERFIL_HORA.sum()
 
 
-def _llegada(rng, inicio: datetime, dias: int) -> datetime:
-    dia = inicio + timedelta(days=int(rng.integers(0, dias)))
+def _pesos_dias(inicio: datetime, dias: int) -> np.ndarray:
+    """Probabilidad de cada día del rango: estacionalidad anual suave (pico a mitad de año) y
+    tendencia leve al alza. Inventado, solo para que las series tengan algo que descomponer."""
+    d = np.arange(dias)
+    doy = np.array([(inicio + timedelta(days=int(i))).timetuple().tm_yday for i in d])
+    w = (1 + 0.15 * np.sin(2 * np.pi * (doy - 80) / 365.25)) * (1 + 0.10 * d / max(dias, 1))
+    return w / w.sum()
+
+
+def _llegada(rng, inicio: datetime, pesos: np.ndarray) -> datetime:
+    dia = inicio + timedelta(days=int(rng.choice(len(pesos), p=pesos)))
     # un poco más de demanda los lunes (estacionalidad semanal inventada)
     if dia.weekday() != 0 and rng.random() < 0.08:
         dia += timedelta(days=(7 - dia.weekday()) % 7)
@@ -129,6 +163,7 @@ def _llegada(rng, inicio: datetime, dias: int) -> datetime:
 
 def generar(n_pacientes: int, semilla: int, inicio: datetime, dias: int):
     rng = np.random.default_rng(semilla)
+    pesos = _pesos_dias(inicio, dias)
     personas, visitas, detalles = [], [], []
     vid = did = 0
 
@@ -141,7 +176,7 @@ def generar(n_pacientes: int, semilla: int, inicio: datetime, dias: int):
         personas.append((pid, int(rng.choice([8507, 8532])), int(rng.integers(1935, 2024)), 0, 0))
         for _ in range(int(rng.poisson(1.3)) + 1):          # visitas (agrupadores) por paciente
             vid += 1
-            t0 = _llegada(rng, inicio, dias)
+            t0 = _llegada(rng, inicio, pesos)
             tipo = rng.choice(["urg", "amb", "hosp_directa"], p=[0.55, 0.35, 0.10])
             primeros = []
 
@@ -190,9 +225,35 @@ def generar(n_pacientes: int, semilla: int, inicio: datetime, dias: int):
     # algunas visitas sin segmentos ("No matching concept")
     for _ in range(n_pacientes // 20):
         vid += 1
-        t = _llegada(rng, inicio, dias)
+        t = _llegada(rng, inicio, pesos)
         visitas.append((vid, int(rng.integers(1, n_pacientes + 1)), 0, t, t, 1))
     return personas, visitas, detalles
+
+
+def clinicos(rng, visitas, detalles):
+    """Diagnósticos, procedimientos (solo fecha) y laboratorios inventados para las visitas
+    que pasan por urgencias u hospitalización."""
+    inicio_seg: dict[int, datetime] = {}
+    for _, v, cid, ini, _, _ in detalles:
+        if cid in (ER, TU, IP) and (v not in inicio_seg or ini < inicio_seg[v]):
+            inicio_seg[v] = ini
+    persona = {v[0]: v[1] for v in visitas}
+    cond, proc, meas = [], [], []
+    p_dx = np.array([x[2] for x in DIAGNOSTICOS]); p_dx /= p_dx.sum()
+    p_px = np.array([x[2] for x in PROCEDIMIENTOS]); p_px /= p_px.sum()
+    for v, t in inicio_seg.items():
+        for _ in range(int(rng.integers(1, 3))):
+            dx = DIAGNOSTICOS[int(rng.choice(len(DIAGNOSTICOS), p=p_dx))][0]
+            cond.append((len(cond) + 1, persona[v], v, dx, t + timedelta(minutes=int(rng.integers(5, 120))), 32817))
+        if rng.random() < 0.6:
+            px = PROCEDIMIENTOS[int(rng.choice(len(PROCEDIMIENTOS), p=p_px))][0]
+            proc.append((len(proc) + 1, persona[v], v, px, (t + timedelta(hours=int(rng.integers(0, 12)))).date()))
+        for _ in range(int(rng.poisson(2))):
+            c, _, media, de = LABORATORIOS[int(rng.integers(0, len(LABORATORIOS)))]
+            valor = None if rng.random() < 0.05 else round(float(rng.normal(media, de)), 2)
+            meas.append((len(meas) + 1, persona[v], v, c, t + timedelta(minutes=int(rng.integers(10, 240))),
+                         valor, "sintetico"))
+    return cond, proc, meas
 
 
 def main() -> None:
@@ -200,7 +261,7 @@ def main() -> None:
     ap.add_argument("--url", required=True, help="PostgreSQL LOCAL, p. ej. postgresql://yo@localhost/omop_sintetico")
     ap.add_argument("--pacientes", type=int, default=3000)
     ap.add_argument("--semilla", type=int, default=42)
-    ap.add_argument("--dias", type=int, default=365)
+    ap.add_argument("--dias", type=int, default=730, help="días del rango (por defecto dos años)")
     a = ap.parse_args()
 
     _validar_url(a.url)
@@ -208,6 +269,7 @@ def main() -> None:
         os.environ.pop(var, None)
 
     personas, visitas, detalles = generar(a.pacientes, a.semilla, datetime(2023, 1, 2), a.dias)
+    cond, proc, meas = clinicos(np.random.default_rng(a.semilla + 1), visitas, detalles)
     with psycopg2.connect(a.url) as con, con.cursor() as cur:
         _verificar_servidor_local(cur)
         _verificar_esquema_es_sintetico(cur)
@@ -216,8 +278,14 @@ def main() -> None:
         execute_values(cur, "INSERT INTO person VALUES %s", personas)
         execute_values(cur, "INSERT INTO visit_occurrence VALUES %s", visitas)
         execute_values(cur, "INSERT INTO visit_detail VALUES %s", detalles)
+        execute_values(cur, "INSERT INTO condition_occurrence VALUES %s", cond)
+        execute_values(cur, "INSERT INTO procedure_occurrence VALUES %s", proc)
+        execute_values(cur, "INSERT INTO measurement VALUES %s", meas)
+        cur.execute("CREATE INDEX ON visit_detail (visit_occurrence_id); "
+                    "CREATE INDEX ON visit_occurrence (visit_occurrence_id); ANALYZE;")
     print(f"Sintético listo en el esquema uninorte_omop: {len(personas)} personas, "
-          f"{len(visitas)} visitas, {len(detalles)} segmentos (todo inventado).")
+          f"{len(visitas)} visitas, {len(detalles)} segmentos, {len(cond)} diagnósticos, "
+          f"{len(proc)} procedimientos y {len(meas)} laboratorios (todo inventado).")
 
 
 if __name__ == "__main__":

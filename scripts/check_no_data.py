@@ -5,9 +5,11 @@ Guardián anti-fuga de datos del HUN.
 Revisa archivos y bloquea:
   1. Extensiones / carpetas de datos (csv, parquet, pbix, xlsx, data/, ...)
   2. Archivos de más de MAX_MB megas
-  3. Notebooks (.ipynb) con outputs guardados (las celdas muestran datos)
+  3. Notebooks (.ipynb) con outputs guardados o imágenes pegadas (muestran datos)
   4. Credenciales en el contenido (URIs de Postgres con clave, password=..., PGPASSWORD)
-  5. Texto que parece una tabla pegada (muchas filas delimitadas)
+  5. Texto que parece una tabla pegada (muchas filas delimitadas), también en celdas de notebooks
+  6. Reportes generados con datos (marca hun-datos)
+  7. Archivos que no se pueden leer (no se dejan pasar sin revisar)
 
 Uso:
   python scripts/check_no_data.py --staged   # lo que vas a commitear (hook pre-commit)
@@ -61,8 +63,19 @@ PLACEHOLDERS = re.compile(r"(cambiar|change|xxx|\*\*\*|tu_|your_|<|\$\{|os\.envi
 MARCA_DERIVADO = re.compile(r"""<meta\s+name=["']hun-datos["']""", re.I)
 
 DELIM_ROW = re.compile(r"^[^\n]*?(?:[,;\t|][^,;\t|\n]*){4,}$")
+# Un campo "con cara de dato": número, fecha u hora (1, 9203, 2024-01-02, 07:30, 3.5)
+CAMPO_DATO = re.compile(r"^\s*['\"]?[-+]?\d[\d.:/\- ]*['\"]?\s*$")
+
+
+def parece_fila_de_datos(linea: str) -> bool:
+    """Línea delimitada con al menos 3 campos que parecen datos. Así una fila de CSV pegada
+    cuenta, pero una línea de código con muchas comas (argumentos de una función) no."""
+    if not DELIM_ROW.match(linea):
+        return False
+    return sum(1 for c in re.split(r"[,;\t|]", linea) if CAMPO_DATO.match(c)) >= 3
 TEXT_EXT = {".py", ".sql", ".md", ".txt", ".r", ".rmd", ".qmd", ".json", ".yml", ".yaml",
-            ".toml", ".ini", ".cfg", ".dax", ".m", ".tmdl", ".html", ".js", ".ts", ""}
+            ".toml", ".ini", ".cfg", ".dax", ".m", ".tmdl", ".html", ".js", ".ts", ".ps1", ".psm1",
+            ".sh", ".bat", ".cmd", ".xml", ".svg", ".css", ".example", ""}
 
 
 def git(*args: str) -> bytes:
@@ -105,13 +118,20 @@ def check(path: str, data: bytes) -> list[str]:
     if size_mb > MAX_MB:
         problems.append(f"pesa {size_mb:.1f} MB (límite {MAX_MB} MB)")
 
+    nb_fuente = ""
     if p.suffix.lower() == ".ipynb":
         try:
             nb = json.loads(data.decode("utf-8"))
-            dirty = sum(1 for c in nb.get("cells", []) if c.get("outputs"))
+            celdas = nb.get("cells", [])
+            dirty = sum(1 for c in celdas if c.get("outputs"))
             if dirty:
                 problems.append(f"notebook con outputs guardados en {dirty} celda(s): "
                                 "limpia con 'jupyter nbconvert --clear-output --inplace'")
+            # Imágenes pegadas en celdas markdown (capturas de gráficas o tablas)
+            adjuntos = sum(1 for c in celdas if c.get("attachments"))
+            if adjuntos:
+                problems.append(f"notebook con imágenes pegadas en {adjuntos} celda(s) markdown")
+            nb_fuente = "\n".join("".join(c.get("source", [])) for c in celdas)
         except Exception:
             problems.append("notebook ilegible")
 
@@ -124,10 +144,11 @@ def check(path: str, data: bytes) -> list[str]:
                     problems.append(f"{label} (línea {line})")
         if MARCA_DERIVADO.search(text):
             problems.append("reporte generado a partir de datos del HUN (marca hun-datos)")
-        if p.suffix.lower() != ".ipynb":
-            rows = sum(1 for ln in text.splitlines() if DELIM_ROW.match(ln))
-            if rows > DELIMITED_ROWS_LIMIT:
-                problems.append(f"{rows} líneas con forma de tabla: ¿datos pegados?")
+        # En notebooks se mira el código y el markdown de las celdas (no el JSON)
+        cuerpo = nb_fuente if p.suffix.lower() == ".ipynb" else text
+        rows = sum(1 for ln in cuerpo.splitlines() if parece_fila_de_datos(ln))
+        if rows > DELIMITED_ROWS_LIMIT:
+            problems.append(f"{rows} líneas con forma de tabla: ¿datos pegados?")
     return problems
 
 
@@ -140,7 +161,10 @@ def main() -> int:
     for path in list_files(mode):
         try:
             data = read_file(path, mode)
-        except Exception:
+        except FileNotFoundError:
+            continue                     # --all: archivo versionado que se borró sin commitear
+        except Exception as e:           # si no se puede revisar, no se deja pasar
+            found[path] = [f"no pude leerlo para revisarlo ({type(e).__name__})"]
             continue
         probs = check(path, data)
         if probs:

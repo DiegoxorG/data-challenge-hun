@@ -5,6 +5,14 @@ $ErrorActionPreference = "Stop"
 git config core.hooksPath .githooks
 Write-Host "OK  hooks anti-fuga activados (.githooks)"
 
+# Limpia los outputs de los notebooks automáticamente al hacer git add (si nbstripout está instalado)
+if (Get-Command nbstripout -ErrorAction SilentlyContinue) {
+    nbstripout --install
+    Write-Host "OK  nbstripout activado: los notebooks se guardan en git sin outputs"
+} else {
+    Write-Host "--  nbstripout no está instalado (pip install -r requirements.txt); el hook igual bloquea outputs"
+}
+
 if (-not (Test-Path ".env")) {
     Copy-Item ".env.example" ".env"
     Write-Host "OK  .env creado desde .env.example  -> llénalo con TUS credenciales (no se sube)"

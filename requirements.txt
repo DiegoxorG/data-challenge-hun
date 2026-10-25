@@ -13,3 +13,4 @@ nbstripout>=0.7
 plotly>=5.20
 pyyaml>=6.0
 pytest>=8.0
+holidays>=0.50

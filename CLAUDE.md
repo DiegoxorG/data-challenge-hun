@@ -11,7 +11,7 @@ Equipo: Diego, Sebastián y Joseph (Uninorte, Ciencia de Datos). Comunicación e
 Trabajamos con datos reales de pacientes del Hospital Universidad del Norte (HUN) bajo un acuerdo de confidencialidad. **Subir datos del HUN a una IA, a la nube o a terceros es causal de descalificación.** Por eso:
 
 - **NO leas, abras, busques ni imprimas**: `.env`, la carpeta de datos (`DATA_DIR`, normalmente `C:\hun_data`), archivos `.parquet/.csv/.xlsx/.pbix`, ni la carpeta de DBeaver en AppData. `.claude/settings.json` lo bloquea, pero no dependas solo de eso.
-- **NO ejecutes nada que se conecte a la base o cargue extractos**: `python -m hun.extract`, `scripts/resumen_seguro*.py`, `hun.db.ping`, notebooks con datos. Eso lo corre la persona; tú escribes el código.
+- **NO ejecutes nada que se conecte a la base o cargue extractos**: `python -m hun.extract`, `python -m Cuellos_botella`, `python -m series_tiempo`, los `resumen_seguro` (de `scripts/` y de cada herramienta), `hun.db.ping`, notebooks con datos. Eso lo corre la persona; tú escribes el código. `.claude/settings.json` bloquea esos comandos; `pytest` sí se puede correr (usa datos inventados o la base sintética local).
 - **Lo único que puedes recibir del usuario**: el esquema (tablas, columnas, tipos), nombres e IDs de conceptos OMOP, mensajes de error (revisando que no traigan valores) y la salida de los scripts `scripts/resumen_seguro*.py`, que traducen resultados a palabras ("pocos", "la mayoría") y franjas ("1-4 h"). **Nunca pidas conteos, filas, fechas de pacientes ni textos libres**, y si el usuario los pega, avísale y no los repitas.
 - Nunca escribas cifras de los datos en archivos del repo (ni en docs, comentarios o commits). Los hallazgos van en palabras.
 - Credenciales: solo en `.env` (ignorado por git). Nunca en código, notebooks, chats ni commits.
@@ -43,6 +43,8 @@ sql/00_exploracion/         consultas de exploración (00-18)
 sql/01_episodios/           _episodios.sql (bloque común) + consultas 20-25
 sql/02_cuellos_botella/     entrada.sql (nivel paciente, @nivel_paciente: solo se lee a memoria)
 Cuellos_botella/            herramienta exploratoria de Joseph (reporte HTML + tablas agregadas), ver su README
+series_tiempo/              reporte y series para el pronóstico (consultas 26-28), ver su README
+tests/                      tests de scripts/check_no_data.py
 src/hun/                    config.py (.env + DATA_DIR validada), db.py (conexión), extract.py
 scripts/                    check_no_data.py, setup.*, resumen_seguro*.py, generar_sintetico.py
 notebooks/                  análisis, SIEMPRE sin outputs
@@ -55,6 +57,8 @@ dashboard/                  Power BI como .pbit o PBIP, nunca .pbix
 - Consultas que devuelven una fila por paciente o segmento llevan la línea `-- @nivel_paciente`; `hun.extract` se niega a guardarlas. Se leen a memoria, p. ej. `python -m Cuellos_botella --config Cuellos_botella/config.yaml --entrada sql/02_cuellos_botella/entrada.sql`, y lo que queda en disco son tablas agregadas. Su resumen seguro: `python -m Cuellos_botella.resumen_seguro`.
 - `Cuellos_botella/config.yaml` reproduce `_episodios.sql` y la consulta 25 (solo 9203/3045729/9201, urgencias = 9203 + 3045729, recorte al ingreso, sin urgencias > 7 días ni hospitalización > 90). `Cuellos_botella/tests/test_equivalencia_sql.py` lo comprueba contra la base sintética. **Si el equipo cambia una definición, hay que cambiarla en el SQL y en el config.**
 - Los reportes generados llevan la marca `hun-datos` y el hook los bloquea; `muestra_carriles > 0` (episodios individuales) está bloqueado salvo `--permitir-carriles`.
+- `python -m series_tiempo` corre las consultas agregadas 26-28 (26 = rejilla horaria completa de llegadas, ingresos, altas y censos como la 25; 27 = llegadas diarias por sexo, edad y destino; 28 = tiempos semanales con y sin recorte, solo grupos de 10+), agrega el calendario colombiano y deja en `DATA_DIR/series_tiempo` el reporte `reporte_series.html` y las series en parquet (`series_tiempo.cargar()`). Su resumen seguro: `python -m series_tiempo.resumen_seguro`. Son gráficas exploratorias: el modelado lo hace Sebastián.
+- La 21 solo trae las horas con llegadas (hay que rellenar con 0); para series usa la 26.
 
 ## 4. Esquema real (7 tablas; no hay death, drug_exposure, observation, provider, etc.)
 
@@ -121,6 +125,8 @@ Preguntas enviadas/por enviar a los organizadores: acceso por VPN desde equipos 
 ## 9. Forma de trabajar
 
 - Claude escribe SQL/código y lo prueba con datos sintéticos; la persona lo corre contra la base real y comparte solo el resumen seguro.
+- Claude (chat) puede trabajar en una rama `claude/...` del repo y abrir un pull request; **nunca toca `main`**. La persona revisa el PR (en GitHub o con su Claude Code) y decide si lo fusiona. Nadie fusiona una rama `claude/...` sin revisarla.
+- GitHub Actions corre el chequeo anti-fuga y todos los tests con la base sintética en cada push y PR.
 - Commits: la persona decide. Claude Code agrega archivos uno por uno (nunca `git add -A`), corre `python scripts/check_no_data.py --all`, muestra un resumen y **espera confirmación antes del push**. Nunca `--no-verify` ni `--force`.
 - Notebooks sin outputs (`nbstripout --install` o `jupyter nbconvert --clear-output --inplace`).
 - Power BI: nunca subir `.pbix` (lleva los datos); usar `.pbit` o PBIP sin caché.

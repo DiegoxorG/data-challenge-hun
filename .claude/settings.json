@@ -9,11 +9,25 @@
       "Read(**/*.csv)",
       "Read(**/*.xlsx)",
       "Read(**/*.pbix)",
+      "Read(**/reporte*.html)",
       "Read(~/AppData/Roaming/DBeaverData/**)",
       "Bash(python -m hun.extract *)",
+      "Bash(python -m Cuellos_botella *)",
+      "Bash(python -m Cuellos_botella.resumen_seguro*)",
+      "Bash(python -m series_tiempo *)",
+      "Bash(python -m series_tiempo.resumen_seguro*)",
+      "Bash(python scripts/resumen_seguro*)",
+      "Bash(python scripts\\resumen_seguro*)",
       "Bash(git commit --no-verify *)",
+      "Bash(git commit * --no-verify*)",
+      "Bash(git commit -n *)",
+      "Bash(git commit * -n *)",
+      "Bash(git -c core.hooksPath*)",
       "Bash(git push --force *)",
-      "Bash(git push -f *)"
+      "Bash(git push -f *)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f *)",
+      "Bash(git push * -f)"
     ]
   }
 }
