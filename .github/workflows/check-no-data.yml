@@ -67,6 +67,7 @@ jobs:
           python -m Cuellos_botella.resumen_seguro --salida "$DATA_DIR/cuellos_botella_salidas"
           python -m series_tiempo --estricto
           python -m series_tiempo.resumen_seguro
+          python main.py --opcion todo --no-abrir
       - name: Ejecutar la guía de familiarización (los outputs quedan en la carpeta temporal)
         run: |
           export DATA_DIR="$RUNNER_TEMP/hun_data"

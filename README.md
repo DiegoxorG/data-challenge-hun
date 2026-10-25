@@ -37,6 +37,8 @@ python -c "from hun.db import ping; ping()"
 
 ## Herramientas
 
+**La forma fácil:** doble clic en `ejecutar.bat`, o abre `main.py` en VS Code y dale a ▶ (Run Python File). Sale un menú: revisa tu `.env` y la VPN, corre el reporte que elijas, lo abre en el navegador y muestra el resumen seguro. Lo mismo a mano:
+
 | Comando | Para qué | Salida (en `DATA_DIR`) |
 |---|---|---|
 | `notebooks/00_guia_familiarizacion.ipynb` | Conocer la base con tus propios ojos | en pantalla |
