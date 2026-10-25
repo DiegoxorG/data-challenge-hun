@@ -20,3 +20,60 @@ jobs:
           python-version: "3.12"
       - name: Revisar que no haya datos ni credenciales
         run: python scripts/check_no_data.py --all
+
+  # Reproducibilidad: todo el repo corre de punta a punta sobre la base SINTÉTICA, sin tocar
+  # la del HUN. El PostgreSQL es un contenedor temporal de GitHub (acepta cualquier clave);
+  # las salidas quedan en la carpeta temporal del runner y se borran al terminar.
+  tests:
+    needs: check
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: hun
+          POSTGRES_DB: omop_sintetico
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U hun" --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      HUN_TEST_PG_URL: postgresql://hun@localhost:5432/omop_sintetico
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGDATABASE: omop_sintetico
+      PGUSER: hun
+      PGPASSWORD: sin_clave_ci      # el contenedor usa trust; hun.config solo exige que exista
+      PGSCHEMA: uninorte_omop
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Instalar dependencias
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
+      - name: Crear la base sintética
+        run: python scripts/generar_sintetico.py --url "$HUN_TEST_PG_URL" --pacientes 20000
+      - name: Tests
+        run: python -m pytest -q
+      - name: Pipeline completo sobre la base sintética
+        run: |
+          export DATA_DIR="$RUNNER_TEMP/hun_data"
+          for q in 20_resumen_episodios 21_llegadas_por_hora 22_tiempo_urgencias_por_franja 25_ocupacion_ajustada; do
+            python -m hun.extract "sql/01_episodios/$q.sql"
+          done
+          python -m Cuellos_botella --config Cuellos_botella/config.yaml --entrada sql/02_cuellos_botella/entrada.sql --estricto
+          python -m Cuellos_botella.resumen_seguro --salida "$DATA_DIR/cuellos_botella_salidas"
+          python -m series_tiempo --estricto
+          python -m series_tiempo.resumen_seguro
+      - name: Ejecutar los notebooks (los outputs quedan en la carpeta temporal)
+        run: |
+          export DATA_DIR="$RUNNER_TEMP/hun_data"
+          for nb in 00_guia_familiarizacion 01_series_tiempo_arranque; do
+            jupyter nbconvert --to notebook --execute "notebooks/$nb.ipynb" \
+              --output "$RUNNER_TEMP/$nb.ejecutado.ipynb" --ExecutePreprocessor.timeout=600
+          done
