@@ -62,7 +62,7 @@ HUN_TEST_PG_URL=postgresql://yo@localhost:5432/omop_sintetico python -m pytest
 .github/workflows/          misma revisión en GitHub (segunda barrera)
 docs/                       protocolo de datos, metodología, decisiones
 sql/                        consultas (versionadas); los resultados NO
-src/hun/                    config (.env + DATA_DIR validada), conexión, extracción
+src/hun/                    config (.env + DATA_DIR validada), conexión, extracción, palabras de los resúmenes
 Cuellos_botella/            reporte de cuellos de botella (Joseph)
 series_tiempo/              reporte y series para el pronóstico
 notebooks/                  guía de familiarización y análisis, siempre sin outputs

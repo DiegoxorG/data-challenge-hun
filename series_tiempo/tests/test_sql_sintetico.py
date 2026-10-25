@@ -1,7 +1,6 @@
 """Las consultas 26-28 cuadran con la 21 y la 25 sobre la base SINTÉTICA local.
 Se salta sin HUN_TEST_PG_URL; se niega a correr contra un host no local o un esquema sin la
 marca _es_sintetico (mismas defensas que el test de equivalencia de Cuellos_botella)."""
-import importlib.util
 import os
 from pathlib import Path
 
@@ -11,24 +10,6 @@ import pytest
 REPO = Path(__file__).resolve().parents[2]
 URL = os.getenv("HUN_TEST_PG_URL")
 pytestmark = pytest.mark.skipif(not URL, reason="sin HUN_TEST_PG_URL (PostgreSQL local sintético)")
-
-
-@pytest.fixture(scope="module")
-def eng():
-    from sqlalchemy import create_engine
-    spec = importlib.util.spec_from_file_location("gen", REPO / "scripts" / "generar_sintetico.py")
-    gen = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(gen)
-    gen._validar_url(URL)
-    e = create_engine("postgresql+psycopg2://" + URL.split("://", 1)[1],
-                      connect_args={"options": "-csearch_path=uninorte_omop"})
-    with e.connect() as c:
-        cur = c.connection.cursor()
-        gen._verificar_servidor_local(cur)
-        cur.execute("SELECT to_regclass('uninorte_omop._es_sintetico') IS NOT NULL")
-        if not cur.fetchone()[0]:
-            pytest.fail("el esquema no tiene la marca _es_sintetico")
-    return e
 
 
 def test_26_cuadra_con_21_y_25(eng):

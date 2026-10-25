@@ -39,13 +39,13 @@ Trabajamos con datos reales de pacientes del Hospital Universidad del Norte (HUN
 .github/workflows/          misma revisión en GitHub Actions
 .claude/settings.json       reglas deny para Claude Code (.env, datos, --no-verify, --force)
 docs/                       PROTOCOLO_DATOS.md, METODOLOGIA_EPISODIOS.md
-sql/00_exploracion/         consultas de exploración (00-18)
+sql/00_exploracion/         consultas de exploración (00-02, 07-18) y su README con lo que mostró cada una
 sql/01_episodios/           _episodios.sql (bloque común) + consultas 20-25
 sql/02_cuellos_botella/     entrada.sql (nivel paciente, @nivel_paciente: solo se lee a memoria)
 Cuellos_botella/            herramienta exploratoria de Joseph (reporte HTML + tablas agregadas), ver su README
 series_tiempo/              reporte y series para el pronóstico (consultas 26-28), ver su README
-tests/                      tests de scripts/check_no_data.py
-src/hun/                    config.py (.env + DATA_DIR validada), db.py (conexión), extract.py
+tests/                      tests de scripts/check_no_data.py (conftest.py en la raíz: rutas y base sintética)
+src/hun/                    config.py (.env, DATA_DIR y validar_carpeta), db.py (conexión), extract.py, palabras.py
 scripts/                    check_no_data.py, setup.*, resumen_seguro*.py, generar_sintetico.py
 notebooks/                  análisis, SIEMPRE sin outputs
 dashboard/                  Power BI como .pbit o PBIP, nunca .pbix
@@ -53,7 +53,7 @@ dashboard/                  Power BI como .pbit o PBIP, nunca .pbix
 
 - `python -m hun.extract sql\...\archivo.sql` corre una consulta y guarda el resultado en `DATA_DIR/<nombre>.parquet`; en consola solo imprime filas y columnas. `hun.extract.load("<nombre>")` lo carga.
 - `extract.py` envuelve la consulta en `sqlalchemy.text()` (los `%` de `ILIKE` no rompen psycopg2) y soporta `-- @include archivo.sql` para reutilizar bloques. Las consultas con `@include` no corren tal cual en DBeaver: hay que pegar el bloque incluido.
-- Patrón para compartir resultados con Claude: por cada lote de consultas hay un `scripts/resumen_seguro_N.py` que lee los extractos y los imprime en palabras/franjas. Al crear consultas nuevas, crea también su resumen seguro.
+- Patrón para compartir resultados con Claude: por cada lote de consultas hay un `scripts/resumen_seguro_N.py` que lee los extractos y los imprime en palabras/franjas. Al crear consultas nuevas, crea también su resumen seguro, usando las funciones de `hun.palabras` (`cuanto`, `franja`, `veces`, `es`, `extracto`) para que todas las herramientas hablen igual.
 - Consultas que devuelven una fila por paciente o segmento llevan la línea `-- @nivel_paciente`; `hun.extract` se niega a guardarlas. Se leen a memoria, p. ej. `python -m Cuellos_botella --config Cuellos_botella/config.yaml --entrada sql/02_cuellos_botella/entrada.sql`, y lo que queda en disco son tablas agregadas. Su resumen seguro: `python -m Cuellos_botella.resumen_seguro`.
 - `Cuellos_botella/config.yaml` reproduce `_episodios.sql` y la consulta 25 (solo 9203/3045729/9201, urgencias = 9203 + 3045729, recorte al ingreso, sin urgencias > 7 días ni hospitalización > 90). `Cuellos_botella/tests/test_equivalencia_sql.py` lo comprueba contra la base sintética. **Si el equipo cambia una definición, hay que cambiarla en el SQL y en el config.**
 - Los reportes generados llevan la marca `hun-datos` y el hook los bloquea; `muestra_carriles > 0` (episodios individuales) está bloqueado salvo `--permitir-carriles`.

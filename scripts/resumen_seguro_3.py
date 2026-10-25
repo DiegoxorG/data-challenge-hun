@@ -9,49 +9,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from hun.extract import load
-
-
-def _try(nombre: str) -> pd.DataFrame | None:
-    try:
-        return load(nombre)
-    except FileNotFoundError:
-        print(f"  (no encontré {nombre}; córrelo con hun.extract)")
-        return None
-
-
-def cuanto(p: float) -> str:
-    """Proporción en palabras, sin cifras exactas."""
-    if pd.isna(p) or p == 0:
-        return "ninguno"
-    if p < 0.01:
-        return "casi ninguno"
-    if p < 0.10:
-        return "pocos"
-    if p < 0.50:
-        return "bastantes"
-    if p < 0.90:
-        return "la mayoría"
-    return "casi todos"
-
-
-def franja(minutos: float) -> str:
-    """Duración en una franja amplia, sin el valor exacto."""
-    if pd.isna(minutos):
-        return "sin dato"
-    if minutos < 15:
-        return "menos de 15 min"
-    if minutos < 60:
-        return "entre 15 min y 1 h"
-    if minutos < 240:
-        return "entre 1 y 4 h"
-    if minutos < 720:
-        return "entre 4 y 12 h"
-    if minutos < 1440:
-        return "entre 12 y 24 h"
-    if minutos < 10080:
-        return "entre 1 y 7 días"
-    return "más de 7 días"
+from hun.palabras import cuanto, franja, extracto as _try
 
 
 def _franjas(r: pd.Series, cols: dict[str, str]) -> str:

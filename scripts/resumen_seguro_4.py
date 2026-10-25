@@ -10,59 +10,10 @@ from __future__ import annotations
 
 import pandas as pd
 
-from hun.extract import load
+from hun.palabras import cuanto, franja, veces, extracto as _try
 
 CAPACIDAD_URGENCIAS = 58      # cubículos habilitados (salida de campo 1 oct)
 CAPACIDAD_HOSPITAL = 64       # camas de hospitalización (salida de campo 1 oct)
-
-
-def _try(nombre: str) -> pd.DataFrame | None:
-    try:
-        return load(nombre)
-    except FileNotFoundError:
-        print(f"  (no encontré {nombre}; córrelo con hun.extract)")
-        return None
-
-
-def cuanto(p: float) -> str:
-    if pd.isna(p) or p == 0:
-        return "ninguno"
-    if p < 0.01:
-        return "casi ninguno"
-    if p < 0.10:
-        return "pocos"
-    if p < 0.50:
-        return "bastantes"
-    if p < 0.90:
-        return "la mayoría"
-    return "casi todos"
-
-
-def franja(minutos: float) -> str:
-    if pd.isna(minutos):
-        return "sin dato"
-    for limite, etiqueta in [(15, "menos de 15 min"), (60, "15 min-1 h"), (240, "1-4 h"),
-                             (720, "4-12 h"), (1440, "12-24 h"), (4320, "1-3 días"),
-                             (10080, "3-7 días")]:
-        if minutos < limite:
-            return etiqueta
-    return "más de 7 días"
-
-
-def veces(a: float, b: float) -> str:
-    """Compara a contra b en palabras."""
-    if pd.isna(a) or pd.isna(b) or b <= 0:
-        return "no se puede comparar"
-    r = a / b
-    if r < 0.8:
-        return "MENOS que"
-    if r < 1.25:
-        return "parecido a"
-    if r < 1.5:
-        return "algo más que"
-    if r < 3:
-        return "bastante más que (1.5 a 3 veces)"
-    return "mucho más que (más de 3 veces)"
 
 
 print("\n== 20 · Episodios ==")
