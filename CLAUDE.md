@@ -44,6 +44,7 @@ sql/01_episodios/           _episodios.sql (bloque común) + consultas 20-25
 sql/02_cuellos_botella/     entrada.sql (nivel paciente, @nivel_paciente: solo se lee a memoria)
 Cuellos_botella/            herramienta exploratoria de Joseph (reporte HTML + tablas agregadas), ver su README
 series_tiempo/              reporte y series para el pronóstico (consultas 26-28), ver su README
+pronostico/                 modelo de pronóstico de llegadas por hora (GLM + backtest) y CSV para Power BI, ver su README
 tests/                      tests de scripts/check_no_data.py (conftest.py en la raíz: rutas y base sintética)
 src/hun/                    config.py (.env, DATA_DIR y validar_carpeta), db.py (conexión), extract.py, palabras.py
 scripts/                    check_no_data.py, setup.*, resumen_seguro*.py, generar_sintetico.py
@@ -58,6 +59,7 @@ dashboard/                  Power BI como .pbit o PBIP, nunca .pbix
 - `Cuellos_botella/config.yaml` reproduce `_episodios.sql` y la consulta 25 (solo 9203/3045729/9201, urgencias = 9203 + 3045729, recorte al ingreso, sin urgencias > 7 días ni hospitalización > 90). `Cuellos_botella/tests/test_equivalencia_sql.py` lo comprueba contra la base sintética. **Si el equipo cambia una definición, hay que cambiarla en el SQL y en el config.**
 - Los reportes generados llevan la marca `hun-datos` y el hook los bloquea; `muestra_carriles > 0` (episodios individuales) está bloqueado salvo `--permitir-carriles`.
 - `python -m series_tiempo` corre las consultas agregadas 26-28 (26 = rejilla horaria completa de llegadas, ingresos, altas y censos como la 25; 27 = llegadas diarias por sexo, edad y destino; 28 = tiempos semanales con y sin recorte, solo grupos de 10+), agrega el calendario colombiano y deja en `DATA_DIR/series_tiempo` el reporte `reporte_series.html` y las series en parquet (`series_tiempo.cargar()`). Su resumen seguro: `python -m series_tiempo.resumen_seguro`. Son gráficas exploratorias: el modelado lo hace Sebastián.
+- `python -m pronostico` lee las series de `series_tiempo` (no se conecta a la base), compara una línea base (misma hora de la semana pasada, promedio de 4 semanas) contra un GLM de conteos (hora de la semana, festivo × hora, calendario colombiano, tendencia; estacionalidad anual solo con 2+ años) con backtest rodante semanal, y deja en `DATA_DIR/pronostico/powerbi` los CSV para el dashboard (pronóstico horario y diario con intervalo del 90 %, backtest, métricas, efectos de calendario, perfil semanal). Su resumen seguro: `python -m pronostico.resumen_seguro`. Claude Code no lo corre (reglas deny).
 - La 21 solo trae las horas con llegadas (hay que rellenar con 0); para series usa la 26.
 - `main.py` (o doble clic en `ejecutar.bat`) es el menú para el equipo: revisa `.env` y VPN sin imprimir valores, corre series y/o cuellos de botella, abre el reporte y muestra el resumen seguro. Se conecta a la base: Claude Code no lo corre (está en las reglas deny).
 
