@@ -35,7 +35,7 @@ def perfil(horas: pd.DataFrame, completo: pd.Series) -> pd.DataFrame:
     después del calentamiento del censo."""
     h = horas.loc[completo.to_numpy(), COLUMNAS].astype(float)
     h = h[h.index >= horas.index.min() + pd.Timedelta(days=DIAS_CALENTAMIENTO)]
-    how = h.index.dayofweek * 24 + h.index.hour
+    how = h.index.day_of_week * 24 + h.index.hour
     p = h.groupby(how).mean().reindex(range(H_SEMANA))
     p["altas_tarde"] = np.where(np.isin(np.arange(H_SEMANA) % 24, list(TARDE)), p["altas_cama"], 0.0)
     p.index.name = "how"

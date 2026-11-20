@@ -19,7 +19,7 @@ def inventado(dias=420, semilla=0, efecto_festivo=0.7, tamano_nb=5.0):
     cal.loc[d[5::37], "festivo"] = True
     cal.loc[d[6::37], "despues_de_festivo"] = True
     perfil = 1 + 0.8 * np.sin(2 * np.pi * (h.hour - 8) / 24)
-    semana = np.where(h.dayofweek == 0, 1.4, np.where(h.dayofweek >= 5, 0.8, 1.0))
+    semana = np.where(h.day_of_week == 0, 1.4, np.where(h.day_of_week >= 5, 0.8, 1.0))
     fest = cal["festivo"].reindex(h.normalize()).to_numpy()
     lam = 3 * perfil * semana * np.where(fest, efecto_festivo, 1.0)
     y = rng.negative_binomial(tamano_nb, tamano_nb / (tamano_nb + lam))
@@ -137,3 +137,21 @@ def test_punta_a_punta_y_resumen_sin_cifras(tmp_path, capsys):
     decimales = {w.strip("(),.:;") for w in texto.split() if "." in w.strip("(),.:;")
                  and w.strip("(),.:;").replace(".", "").isdigit()}
     assert decimales <= franjas, decimales
+
+
+def test_reporte_interpretacion_marcado_y_completo(tmp_path):
+    from pronostico.reporte import armar
+    from escenarios.__main__ import correr as correr_esc
+    horas, cal = inventado(dias=300)
+    horas["ingresos_desde_urgencias"] = horas["llegadas_hospitalizan"]
+    horas["altas_cama"] = horas["llegadas_hospitalizan"]
+    horas["censo_urgencias"] = 20.0
+    horas["censo_hospitalizacion"] = 60.0
+    sal = carpeta_salida(tmp_path / "pronostico")
+    correr(horas, cal, sal, ["llegadas", "llegadas_hospitalizan"], horizonte_dias=7, semanas_backtest=3, log=lambda *_: None)
+    esc = carpeta_salida(tmp_path / "escenarios")
+    correr_esc(horas, esc)
+    html = armar(sal, esc)
+    from pronostico.reporte import MARCA
+    assert f'<meta name="{MARCA}"' in html            # el hook anti-fuga bloquea el HTML generado
+    assert html.count("data:image/png") >= 8

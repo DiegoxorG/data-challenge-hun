@@ -132,7 +132,7 @@ def correr(horas: pd.DataFrame, cal: pd.DataFrame, salida: Path, series: list[st
     def _horas(df):
         df = df.copy()
         df["fecha"] = df["hora"].dt.normalize()
-        df["dia_semana"] = df["hora"].dt.dayofweek          # 0 = lunes
+        df["dia_semana"] = df["hora"].dt.day_of_week          # 0 = lunes
         df["hora_dia"] = df["hora"].dt.hour
         return df
 

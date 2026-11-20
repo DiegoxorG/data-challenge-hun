@@ -45,7 +45,7 @@ def variables(horas: pd.DatetimeIndex, cal: pd.DataFrame, t0: pd.Timestamp) -> p
     - tendencia lineal en años desde t0
     """
     idx = pd.DatetimeIndex(horas)
-    how = idx.dayofweek * 24 + idx.hour
+    how = idx.day_of_week * 24 + idx.hour
     X = {f"how_{k:03d}": (how == k).astype(float) for k in range(H_SEMANA)}
     c = cal.reindex(idx.normalize())
     for col in CALENDARIO:
@@ -54,7 +54,7 @@ def variables(horas: pd.DatetimeIndex, cal: pd.DataFrame, t0: pd.Timestamp) -> p
     fest = X["cal_festivo"]
     for h in range(24):
         X[f"festivo_h{h:02d}"] = fest * (idx.hour == h)
-    doy = idx.dayofyear.to_numpy() / 365.25
+    doy = idx.day_of_year.to_numpy() / 365.25
     for k in (1, 2):
         X[f"anual_sin{k}"] = np.sin(2 * np.pi * k * doy)
         X[f"anual_cos{k}"] = np.cos(2 * np.pi * k * doy)
@@ -116,16 +116,16 @@ def naive_semanal(y: pd.Series, horas: pd.DatetimeIndex, corte: pd.Timestamp) ->
     """Para cada hora futura, el último valor observado (antes del corte) en esa misma hora de
     la semana. Con horizonte de una semana es exactamente 'la semana pasada'."""
     hist = y[y.index < corte].dropna()
-    ult = hist.groupby(hist.index.dayofweek * 24 + hist.index.hour).last()
-    how = horas.dayofweek * 24 + horas.hour
+    ult = hist.groupby(hist.index.day_of_week * 24 + hist.index.hour).last()
+    how = horas.day_of_week * 24 + horas.hour
     return ult.reindex(how).to_numpy(dtype=float)
 
 
 def promedio_semanal(y: pd.Series, horas: pd.DatetimeIndex, corte: pd.Timestamp,
                      semanas: int = SEMANAS_PROMEDIO) -> np.ndarray:
     hist = y[(y.index < corte) & (y.index >= corte - pd.Timedelta(weeks=semanas))].dropna()
-    m = hist.groupby(hist.index.dayofweek * 24 + hist.index.hour).mean()
-    how = horas.dayofweek * 24 + horas.hour
+    m = hist.groupby(hist.index.day_of_week * 24 + hist.index.hour).mean()
+    how = horas.day_of_week * 24 + horas.hour
     return m.reindex(how).to_numpy(dtype=float)
 
 

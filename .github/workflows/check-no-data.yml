@@ -67,6 +67,14 @@ jobs:
           python -m Cuellos_botella.resumen_seguro --salida "$DATA_DIR/cuellos_botella_salidas"
           python -m series_tiempo --estricto
           python -m series_tiempo.resumen_seguro
+          python -m pronostico --excluir-ultimas-semanas 6
+          python -m pronostico.resumen_seguro
+          python -m escenarios
+          python -m escenarios.resumen_seguro
+          python -m semaforo
+          python -m semaforo.resumen_seguro
+          python -m pronostico.reporte --no-abrir
+          python scripts/resumen_seguro_perfiles.py --salida "$DATA_DIR/cuellos_botella_salidas"
           python main.py --opcion todo --no-abrir
       - name: Ejecutar la guía de familiarización (los outputs quedan en la carpeta temporal)
         run: |
