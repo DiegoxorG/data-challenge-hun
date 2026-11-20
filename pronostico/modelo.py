@@ -29,7 +29,7 @@ SEMANAS_PROMEDIO = 4
 NIVEL_INTERVALO = 0.90
 # Columnas de calendario de series_tiempo.calendario que entran como variables
 CALENDARIO = ["festivo", "despues_de_festivo", "puente", "semana_santa", "carnaval", "navidad_anio_nuevo"]
-MODELOS = ["naive_semanal", "promedio_semanal", "glm"]
+MODELOS = ["naive_semanal", "promedio_semanal", "glm", "glm_nivel"]
 MIN_DIAS_ANUAL = 730       # estacionalidad anual solo con 2+ años de historia
 MIN_DIAS_TENDENCIA = 180
 
@@ -146,58 +146,133 @@ def cortes_backtest(y: pd.Series, semanas: int, min_entrenamiento_dias: int = 18
     return sorted(cortes)
 
 
+def nivel_reciente(y: pd.Series, g: "Glm", cal: pd.DataFrame, corte: pd.Timestamp,
+                   semanas: int = SEMANAS_PROMEDIO) -> float:
+    """Cociente real / ajustado del GLM en las últimas `semanas` antes del corte. Corrige el nivel
+    cuando la demanda reciente se aparta de lo que el GLM aprendió con toda la historia (la tendencia
+    lineal no sigue bien los cambios recientes). Acotado a [0.5, 1.5] para que un hueco de registro
+    no lo dispare."""
+    v = y[(y.index < corte) & (y.index >= corte - pd.Timedelta(weeks=semanas))].dropna()
+    if v.empty:
+        return 1.0
+    mu = g.media(v.index, cal)
+    return float(np.clip(v.sum() / max(mu.sum(), 1e-9), 0.5, 1.5))
+
+
 def backtest(y: pd.Series, cal: pd.DataFrame, semanas: int = 12) -> pd.DataFrame:
-    """Pronóstico de cada semana de prueba con los tres modelos. Devuelve una fila por hora × modelo
-    con real, pred, li, ls (intervalo solo para el GLM) y el corte."""
+    """Pronóstico de cada semana de prueba con los cuatro modelos. Devuelve una fila por
+    hora × modelo con real, pred y el corte. Los intervalos se calibran después (`calibrar`)."""
     filas = []
     for c in cortes_backtest(y, semanas):
         horas = pd.date_range(c, periods=H_SEMANA, freq="h")
         real = y.reindex(horas).to_numpy(dtype=float)
         g = ajustar_glm(y[y.index < c], cal)
         mu = g.media(horas, cal)
-        li, ls = g.intervalo(mu)
-        preds = {"naive_semanal": (naive_semanal(y, horas, c), None, None),
-                 "promedio_semanal": (promedio_semanal(y, horas, c), None, None),
-                 "glm": (mu, li, ls)}
-        for m, (p, a, b) in preds.items():
-            filas.append(pd.DataFrame({"hora": horas, "corte": c, "modelo": m, "real": real, "pred": p,
-                                       "li": a if a is not None else np.nan,
-                                       "ls": b if b is not None else np.nan,
-                                       "alpha_nb": g.alpha_nb if m == "glm" else np.nan}))
+        preds = {"naive_semanal": naive_semanal(y, horas, c),
+                 "promedio_semanal": promedio_semanal(y, horas, c),
+                 "glm": mu,
+                 "glm_nivel": mu * nivel_reciente(y, g, cal, c)}
+        for m, p in preds.items():
+            filas.append(pd.DataFrame({"hora": horas, "corte": c, "modelo": m, "real": real, "pred": p}))
     if not filas:
-        return pd.DataFrame(columns=["hora", "corte", "modelo", "real", "pred", "li", "ls", "alpha_nb"])
-    return pd.concat(filas, ignore_index=True)
+        return pd.DataFrame(columns=["hora", "corte", "modelo", "real", "pred", "li", "ls"])
+    return calibrar(pd.concat(filas, ignore_index=True))
+
+
+# --- intervalos calibrados con errores fuera de muestra ------------------------------------
+def alpha_empirico(real, pred) -> float:
+    """Dispersión NB2 (Var = mu + alpha mu²) estimada con errores de pronóstico reales, no con el
+    ajuste: así el intervalo incluye también el error de nivel del modelo."""
+    r, p = np.asarray(real, float), np.asarray(pred, float)
+    ok = np.isfinite(r) & np.isfinite(p) & (p > 0)
+    if ok.sum() < 5:
+        return 0.0
+    r, p = r[ok], p[ok]
+    return float(max(np.sum((r - p) ** 2 - p) / np.sum(p ** 2), 0.0))
+
+
+def intervalo_nb(mu, alpha: float, nivel: float = NIVEL_INTERVALO) -> tuple[np.ndarray, np.ndarray]:
+    mu = np.maximum(np.asarray(mu, dtype=float), 1e-9)
+    a = (1 - nivel) / 2
+    if alpha > 1e-6:
+        n = 1 / alpha
+        q = n / (n + mu)
+        return stats.nbinom.ppf(a, n, q), stats.nbinom.ppf(1 - a, n, q)
+    return stats.poisson.ppf(a, mu), stats.poisson.ppf(1 - a, mu)
+
+
+def _diario(bt: pd.DataFrame) -> pd.DataFrame:
+    return (bt.assign(dia=bt["hora"].dt.normalize())
+              .groupby(["modelo", "corte", "dia"], sort=False)[["real", "pred"]].sum(min_count=1).reset_index())
+
+
+def calibrar(bt: pd.DataFrame) -> pd.DataFrame:
+    """Intervalos horarios de cada semana de prueba con la dispersión estimada en las OTRAS semanas
+    (dejar una fuera): la cobertura que se reporta es honesta, no se mide con lo que se ajustó."""
+    bt = bt.copy()
+    bt["li"], bt["ls"] = np.nan, np.nan
+    for m, g in bt.groupby("modelo"):
+        for c in g["corte"].unique():
+            otras = g[g["corte"] != c]
+            a = alpha_empirico(otras["real"], otras["pred"]) if len(otras) else 0.0
+            idx = g.index[g["corte"] == c]
+            li, ls = intervalo_nb(bt.loc[idx, "pred"], a)
+            bt.loc[idx, "li"], bt.loc[idx, "ls"] = li, ls
+    return bt
+
+
+def diario_calibrado(bt: pd.DataFrame) -> pd.DataFrame:
+    """Totales diarios del backtest con intervalo diario calibrado (dejar una semana fuera)."""
+    d = _diario(bt)
+    d["li"], d["ls"] = np.nan, np.nan
+    for m, g in d.groupby("modelo"):
+        for c in g["corte"].unique():
+            otras = g[g["corte"] != c]
+            a = alpha_empirico(otras["real"], otras["pred"]) if len(otras) else 0.0
+            idx = g.index[g["corte"] == c]
+            li, ls = intervalo_nb(d.loc[idx, "pred"], a)
+            d.loc[idx, "li"], d.loc[idx, "ls"] = li, ls
+    return d
 
 
 def metricas(bt: pd.DataFrame) -> pd.DataFrame:
-    """Errores por modelo, por hora y por día. MASE < 1 = mejor que la línea base naive."""
+    """Errores por modelo, por hora y por día. MASE < 1 = mejor que la línea base naive.
+    Cobertura con intervalos calibrados fuera de muestra (misma regla para todos los modelos)."""
     if bt.empty:
         return pd.DataFrame()
+    if "li" not in bt or bt["li"].isna().all():
+        bt = calibrar(bt)
+    dd = diario_calibrado(bt)
     out = []
     naive = bt[bt["modelo"] == "naive_semanal"]
     mae_naive_h = (naive["real"] - naive["pred"]).abs().mean()
-    nd = naive.assign(dia=naive["hora"].dt.normalize()).groupby("dia")[["real", "pred"]].sum()
+    nd = dd[dd["modelo"] == "naive_semanal"]
     mae_naive_d = (nd["real"] - nd["pred"]).abs().mean()
     for m, g in bt.groupby("modelo", sort=False):
         e = g["real"] - g["pred"]
-        d = g.assign(dia=g["hora"].dt.normalize()).groupby("dia")[["real", "pred"]].sum()
+        d = dd[dd["modelo"] == m]
         ed = d["real"] - d["pred"]
-        cob = ((g["real"] >= g["li"]) & (g["real"] <= g["ls"])).mean() if g["li"].notna().any() else np.nan
-        cob_d = np.nan
-        if g["alpha_nb"].notna().any():
-            dd = g.assign(dia=g["hora"].dt.normalize()).groupby(["corte", "dia"]).agg(
-                real=("real", "sum"), pred=("pred", "sum"), alpha=("alpha_nb", "first"))
-            li, ls = zip(*(intervalo_diario(np.array([r.pred]), r.alpha) for r in dd.itertuples()))
-            li, ls = np.concatenate(li), np.concatenate(ls)
-            cob_d = float(((dd["real"].to_numpy() >= li) & (dd["real"].to_numpy() <= ls)).mean())
         out.append({"modelo": m, "semanas": g["corte"].nunique(),
                     "mae_hora": e.abs().mean(), "rmse_hora": np.sqrt((e ** 2).mean()),
                     "sesgo_hora": e.mean(), "mase_hora": e.abs().mean() / mae_naive_h if mae_naive_h else np.nan,
                     "mae_dia": ed.abs().mean(), "mape_dia": (ed.abs() / d["real"].where(d["real"] > 0)).mean(),
                     "mase_dia": ed.abs().mean() / mae_naive_d if mae_naive_d else np.nan,
                     "media_real_hora": g["real"].mean(), "media_real_dia": d["real"].mean(),
-                    "cobertura_intervalo": cob, "cobertura_intervalo_dia": cob_d})
+                    "cobertura_intervalo": ((g["real"] >= g["li"]) & (g["real"] <= g["ls"])).mean(),
+                    "cobertura_intervalo_dia": ((d["real"] >= d["li"]) & (d["real"] <= d["ls"])).mean(),
+                    "alpha_hora": alpha_empirico(g["real"], g["pred"]),
+                    "alpha_dia": alpha_empirico(d["real"], d["pred"])})
     return pd.DataFrame(out)
+
+
+MODELOS_FINALES = ["glm", "glm_nivel"]   # los que pueden pronosticar el futuro con calendario
+
+
+def elegir_modelo(met: pd.DataFrame) -> str:
+    """El modelo con menor error diario en el backtest entre los que usan calendario (los festivos
+    del horizonte importan). Las líneas base quedan como referencia."""
+    m = met[met["modelo"].isin(MODELOS_FINALES)]
+    return str(m.loc[m["mae_dia"].idxmin(), "modelo"]) if len(m) else "glm"
 
 
 # --- interpretación ------------------------------------------------------------------------
@@ -228,12 +303,19 @@ def perfil_semana(g: Glm) -> pd.DataFrame:
 
 
 # --- pronóstico futuro -------------------------------------------------------------------
-def pronosticar(y: pd.Series, cal: pd.DataFrame, horas_futuras: pd.DatetimeIndex) -> tuple[pd.DataFrame, Glm]:
-    """Ajusta con toda la historia válida y pronostica `horas_futuras` (media e intervalo)."""
+def pronosticar(y: pd.Series, cal: pd.DataFrame, horas_futuras: pd.DatetimeIndex,
+                modelo: str = "glm_nivel", alpha_hora: float | None = None) -> tuple[pd.DataFrame, Glm, float]:
+    """Ajusta con toda la historia válida y pronostica `horas_futuras`. `glm_nivel` reescala al
+    nivel de las últimas 4 semanas. Intervalo con la dispersión del backtest (`alpha_hora`) si se da;
+    si no, con la del ajuste. Devuelve (pronóstico, glm, factor de nivel)."""
     g = ajustar_glm(y, cal)
     mu = g.media(horas_futuras, cal)
-    li, ls = g.intervalo(mu)
-    return pd.DataFrame({"hora": horas_futuras, "pred": mu, "li": li, "ls": ls}), g
+    factor = 1.0
+    if modelo == "glm_nivel":
+        factor = nivel_reciente(y, g, cal, y.dropna().index.max() + pd.Timedelta(hours=1))
+        mu = mu * factor
+    li, ls = intervalo_nb(mu, g.alpha_nb if alpha_hora is None else alpha_hora)
+    return pd.DataFrame({"hora": horas_futuras, "pred": mu, "li": li, "ls": ls}), g, factor
 
 
 def a_diario(df: pd.DataFrame, cols=("real", "pred")) -> pd.DataFrame:

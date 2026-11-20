@@ -12,7 +12,7 @@ python -m pronostico.resumen_seguro     # lo único que se comparte con Claude (
 python -m pytest pronostico/tests       # tests con datos inventados
 ```
 
-Opciones: `--horizonte-dias 14` (días a pronosticar), `--semanas-backtest 12`, `--series llegadas llegadas_hospitalizan`, `--salida`, `--series-dir`.
+Opciones: `--horizonte-dias 14` (días a pronosticar), `--semanas-backtest 12`, `--series llegadas llegadas_hospitalizan`, `--excluir-ultimas-semanas N` (descarta las últimas N semanas completas si su registro todavía está rezagado), `--salida`, `--series-dir`.
 
 ## Los modelos
 
@@ -20,7 +20,14 @@ Opciones: `--horizonte-dias 14` (días a pronosticar), `--semanas-backtest 12`, 
 |---|---|---|
 | `naive_semanal` | La misma hora de la semana pasada | Línea base: cualquier modelo serio tiene que ganarle |
 | `promedio_semanal` | Promedio de esa hora de la semana en las últimas 4 semanas | Línea base más fuerte |
-| `glm` | Regresión de conteos (Poisson; intervalos con binomial negativa si hay sobredispersión) | **El modelo principal** |
+| `glm` | Regresión de conteos (Poisson) con hora de la semana, calendario y tendencia | Captura el patrón y los efectos de calendario |
+| `glm_nivel` | El perfil del `glm` reescalado al nivel real de las últimas 4 semanas | **Candidato principal**: calendario del GLM + adaptación al nivel reciente |
+
+El pronóstico futuro usa, entre `glm` y `glm_nivel`, el que tenga menor error diario en el backtest (queda en `meta.json` y en el resumen seguro). Las líneas base no se usan para el futuro porque no saben de festivos ni temporadas.
+
+**Por qué `glm_nivel`:** con toda la historia, el GLM aprende un nivel promedio y una tendencia lineal; si la demanda reciente se aparta (baja o sube más rápido que la recta), el GLM se pasa o se queda corto en todos los días. El factor de nivel (real ÷ ajustado en las últimas 4 semanas, acotado a 0.5-1.5) corrige eso sin perder el perfil horario ni los efectos de calendario.
+
+**Intervalos calibrados:** la dispersión de la binomial negativa se estima con los **errores del backtest** (fuera de muestra), no con el ajuste. Para reportar la cobertura de cada semana de prueba se usa la dispersión estimada con las otras semanas (dejar una fuera), así la cobertura reportada es honesta.
 
 Variables del GLM:
 - **Hora de la semana** (168 niveles): el ciclo día × hora completo.
@@ -52,8 +59,8 @@ Son información derivada de los datos del HUN: se quedan en el computador, nunc
 | `pronostico_horario.csv` | serie × hora | `serie, hora, real, pred, li, ls, tipo, fecha, dia_semana, hora_dia` | Línea real vs predicho por hora. `tipo`: `historico` (real + ajuste del modelo) o `futuro` (pronóstico con intervalo `li`-`ls`) |
 | `pronostico_diario.csv` | serie × día | `serie, tipo, fecha, real, pred, li, ls` | Línea diaria con banda de confianza en el futuro |
 | `backtest_horario.csv` | serie × modelo × semana de prueba × hora | `serie, hora, corte, modelo, real, pred, li, ls, ...` | "Así le fue al modelo en semanas que no vio" (lo honesto para el jurado) |
-| `backtest_diario.csv` | serie × modelo × corte × día | `serie, modelo, corte, fecha, real, pred` | Comparación de modelos por día |
-| `metricas_modelos.csv` | serie × modelo | `mae_hora, rmse_hora, sesgo_hora, mase_hora, mae_dia, mape_dia, mase_dia, cobertura_intervalo, cobertura_intervalo_dia` | Tabla o tarjetas: cuánto le gana el GLM a las líneas base |
+| `backtest_diario.csv` | serie × modelo × corte × día | `serie, modelo, corte, fecha, real, pred, li, ls` | Comparación de modelos por día con su intervalo calibrado |
+| `metricas_modelos.csv` | serie × modelo | `mae_hora, rmse_hora, sesgo_hora, mase_hora, mae_dia, mape_dia, mase_dia, cobertura_intervalo, cobertura_intervalo_dia, alpha_hora, alpha_dia` | Tabla o tarjetas: cuánto le gana el GLM a las líneas base |
 | `efectos_calendario.csv` | serie × efecto | `efecto, multiplicador` (1.10 = 10 % más llegadas) | Barras: efecto de festivos y temporadas |
 | `perfil_semana.csv` | serie × día × hora | `dia_semana (0 = lunes), hora_dia, relativo` (1.5 = 50 % más que la hora promedio) | Heatmap día × hora del modelo |
 

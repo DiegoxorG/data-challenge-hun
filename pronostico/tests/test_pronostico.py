@@ -59,8 +59,26 @@ def test_backtest_glm_gana_a_la_naive_y_cubre():
     m = M.metricas(bt).set_index("modelo")
     assert m.loc["glm", "mase_hora"] < 0.9
     assert m.loc["glm", "mae_dia"] < m.loc["naive_semanal", "mae_dia"]
-    assert 0.85 <= m.loc["glm", "cobertura_intervalo"] <= 0.99
+    assert 0.8 <= m.loc["glm", "cobertura_intervalo"] <= 0.99
     assert 0.7 <= m.loc["glm", "cobertura_intervalo_dia"] <= 1.0
+    assert set(m.index) == set(M.MODELOS)
+
+
+def test_glm_nivel_corrige_un_cambio_de_nivel_reciente():
+    """La demanda cae 25 % en los últimos meses: el GLM con tendencia lineal se pasa; el GLM con
+    nivel reciente lo corrige y gana por día, y se elige para el pronóstico."""
+    horas, cal = inventado(dias=600, semilla=5)
+    corte = horas.index[-24 * 90]
+    rng = np.random.default_rng(1)
+    tramo = horas.index >= corte
+    horas.loc[tramo, "llegadas"] = rng.binomial(horas.loc[tramo, "llegadas"].to_numpy(), 0.75)
+    y = horas["llegadas"].astype(float).where(horas["completo"])
+    m = M.metricas(M.backtest(y, cal, semanas=6)).set_index("modelo")
+    assert m.loc["glm_nivel", "mae_dia"] < m.loc["glm", "mae_dia"]
+    assert abs(m.loc["glm_nivel", "sesgo_hora"]) < abs(m.loc["glm", "sesgo_hora"])
+    assert M.elegir_modelo(m.reset_index()) == "glm_nivel"
+    # Intervalo calibrado fuera de muestra: cubre razonablemente
+    assert 0.75 <= m.loc["glm_nivel", "cobertura_intervalo_dia"] <= 1.0
 
 
 def test_sin_tendencia_falsa_con_poco_mas_de_un_anio():
@@ -74,7 +92,7 @@ def test_poisson_sin_sobredispersion_usa_poisson():
     horas, cal = inventado(tamano_nb=1e6)                       # prácticamente Poisson
     g = M.ajustar_glm(horas["llegadas"].astype(float), cal)
     assert g.dispersion < 1.15
-    li, ls = g.intervalo(np.array([3.0]))
+    li, ls = M.intervalo_nb(np.array([3.0]), g.alpha_nb)
     assert li[0] <= 3 <= ls[0]
 
 
@@ -101,7 +119,11 @@ def test_punta_a_punta_y_resumen_sin_cifras(tmp_path, capsys):
     assert fut["hora"].min() > ph.loc[ph["tipo"] == "historico", "hora"].max() - pd.Timedelta(hours=1)
     pdia = pd.read_csv(pb / "pronostico_diario.csv")
     assert pdia.loc[pdia["tipo"] == "futuro", "li"].notna().all()
-    assert json.loads((sal / "meta.json").read_text(encoding="utf-8"))["horizonte_dias"] == 7
+    mj = json.loads((sal / "meta.json").read_text(encoding="utf-8"))
+    assert mj["horizonte_dias"] == 7
+    assert mj["series"]["llegadas"]["modelo_elegido"] in M.MODELOS_FINALES
+    bd = pd.read_csv(pb / "backtest_diario.csv")
+    assert {"li", "ls", "fecha"} <= set(bd.columns) and bd["li"].notna().all()
 
     from pronostico.resumen_seguro import main as resumen
     capsys.readouterr()

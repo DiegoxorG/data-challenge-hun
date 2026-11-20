@@ -59,12 +59,19 @@ def calendario_completo(dias: pd.DataFrame, hasta: pd.Timestamp) -> pd.DataFrame
 
 
 def correr(horas: pd.DataFrame, cal: pd.DataFrame, salida: Path, series: list[str],
-           horizonte_dias: int = 14, semanas_backtest: int = 12, log=print) -> dict:
-    """Todo el proceso sobre series ya cargadas. Devuelve meta (lo mismo que meta.json)."""
+           horizonte_dias: int = 14, semanas_backtest: int = 12, excluir_ultimas_semanas: int = 0,
+           log=print) -> dict:
+    """Todo el proceso sobre series ya cargadas. Devuelve meta (lo mismo que meta.json).
+    `excluir_ultimas_semanas`: descarta las últimas N semanas marcadas como completas, por si el
+    registro de esas semanas todavía está rezagado (llegan menos de las que hubo)."""
     pb = salida / "powerbi"
     completo = horas["completo"].fillna(False).astype(bool)
+    if excluir_ultimas_semanas > 0 and completo.any():
+        fin = horas.index[completo.to_numpy()].max()
+        completo = completo & (horas.index <= fin - pd.Timedelta(weeks=excluir_ultimas_semanas))
     hist, bts, mets, efs, perfiles, diarios = [], [], [], [], [], []
     meta = {"horizonte_dias": horizonte_dias, "semanas_backtest_pedidas": semanas_backtest,
+            "excluir_ultimas_semanas": excluir_ultimas_semanas,
             "nivel_intervalo": M.NIVEL_INTERVALO, "series": {}}
     for serie in series:
         if serie not in horas:
@@ -85,7 +92,10 @@ def correr(horas: pd.DataFrame, cal: pd.DataFrame, salida: Path, series: list[st
         log(f"· {serie}: modelo final y pronóstico")
         ultimo = y.dropna().index.max()
         futuras = pd.date_range(ultimo + pd.Timedelta(hours=1), periods=24 * horizonte_dias, freq="h")
-        fut, g = M.pronosticar(y, cal, futuras)
+        elegido = M.elegir_modelo(m)
+        fila = m.set_index("modelo").loc[elegido]
+        log(f"  modelo elegido por el backtest: {elegido}")
+        fut, g, factor = M.pronosticar(y, cal, futuras, modelo=elegido, alpha_hora=float(fila["alpha_hora"]))
         ajuste = g.media(y.dropna().index, cal)
         h = pd.DataFrame({"hora": y.index, "real": y.to_numpy(), "pred": np.nan, "li": np.nan, "ls": np.nan})
         h.loc[y.notna().to_numpy(), "pred"] = ajuste
@@ -99,7 +109,7 @@ def correr(horas: pd.DataFrame, cal: pd.DataFrame, salida: Path, series: list[st
         # Diario: histórico (real vs ajuste) + futuro con su intervalo diario
         d = M.a_diario(hs[["serie", "tipo", "hora", "real", "pred"]])
         dfut = d["tipo"] == "futuro"
-        li, ls = M.intervalo_diario(d.loc[dfut, "pred"].to_numpy(), g)
+        li, ls = M.intervalo_nb(d.loc[dfut, "pred"].to_numpy(), float(fila["alpha_dia"]))
         d["li"], d["ls"] = np.nan, np.nan
         d.loc[dfut, "li"], d.loc[dfut, "ls"] = li, ls
         diarios.append(d)
@@ -113,6 +123,7 @@ def correr(horas: pd.DataFrame, cal: pd.DataFrame, salida: Path, series: list[st
         meta["series"][serie] = {"dispersion": g.dispersion, "alpha_nb": g.alpha_nb,
                                  "distribucion": "binomial negativa" if g.alpha_nb > 1e-6 else "Poisson",
                                  "semanas_backtest": int(bt["corte"].nunique()) if len(bt) else 0,
+                                 "modelo_elegido": elegido, "factor_nivel": factor,
                                  "n_variables": len(g.columnas)}
 
     if not hist:
@@ -129,7 +140,9 @@ def correr(horas: pd.DataFrame, cal: pd.DataFrame, salida: Path, series: list[st
     pd.concat(diarios, ignore_index=True).to_csv(pb / "pronostico_diario.csv", index=False)
     bt_all = pd.concat(bts, ignore_index=True)
     _horas(bt_all).to_csv(pb / "backtest_horario.csv", index=False)
-    M.a_diario(bt_all[["serie", "modelo", "corte", "hora", "real", "pred"]]).to_csv(pb / "backtest_diario.csv", index=False)
+    bd = pd.concat([M.diario_calibrado(b.drop(columns="serie")).assign(serie=b["serie"].iloc[0]) for b in bts],
+                   ignore_index=True).rename(columns={"dia": "fecha"})
+    bd[["serie", "modelo", "corte", "fecha", "real", "pred", "li", "ls"]].to_csv(pb / "backtest_diario.csv", index=False)
     pd.concat(mets, ignore_index=True).to_csv(pb / "metricas_modelos.csv", index=False)
     pd.concat(efs, ignore_index=True).to_csv(pb / "efectos_calendario.csv", index=False)
     pd.concat(perfiles, ignore_index=True).to_csv(pb / "perfil_semana.csv", index=False)
@@ -145,6 +158,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--horizonte-dias", type=int, default=14)
     ap.add_argument("--semanas-backtest", type=int, default=12)
     ap.add_argument("--series", nargs="+", default=SERIES_DEFECTO)
+    ap.add_argument("--excluir-ultimas-semanas", type=int, default=0,
+                    help="descarta las últimas N semanas completas (si el registro reciente está rezagado)")
     a = ap.parse_args(argv)
 
     t0 = time.time()
@@ -154,7 +169,7 @@ def main(argv: list[str] | None = None) -> int:
     horas, dias = cargar_series(a.series_dir)
     ultimo = horas.index[horas["completo"].fillna(False).astype(bool).to_numpy()].max()
     cal = calendario_completo(dias, ultimo + pd.Timedelta(days=a.horizonte_dias + 1))
-    correr(horas, cal, salida, a.series, a.horizonte_dias, a.semanas_backtest)
+    correr(horas, cal, salida, a.series, a.horizonte_dias, a.semanas_backtest, a.excluir_ultimas_semanas)
     print(f"\nListo en {time.time() - t0:.0f} s. Tablas para Power BI en: {salida / 'powerbi'}")
     print("Para compartir con Claude usa SOLO: python -m pronostico.resumen_seguro")
     return 0

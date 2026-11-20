@@ -16,7 +16,8 @@ from .__main__ import carpeta_salida
 DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 NOMBRES = {"naive_semanal": "línea base 'misma hora de la semana pasada'",
            "promedio_semanal": "línea base 'promedio de las últimas 4 semanas'",
-           "glm": "modelo GLM (calendario + tendencia)"}
+           "glm": "GLM (calendario + tendencia)",
+           "glm_nivel": "GLM con nivel reciente (calendario + nivel de las últimas 4 semanas)"}
 EFECTOS = {"festivo": "un festivo", "despues_de_festivo": "el día después de un festivo",
            "puente": "un día de puente", "semana_santa": "Semana Santa", "carnaval": "Carnaval",
            "navidad_anio_nuevo": "24 dic - 1 ene"}
@@ -108,24 +109,38 @@ def main(argv: list[str] | None = None) -> int:
               f"intervalos con {info['distribucion']}.")
         print(f"- Backtest: {info['semanas_backtest']} semanas de prueba, una a la vez, entrenando solo con lo anterior.")
         m = met[met["serie"] == serie].set_index("modelo")
-        if "glm" in m.index:
-            g = m.loc["glm"]
+        for mod in ("glm", "glm_nivel"):
+            if mod not in m.index:
+                continue
+            g = m.loc[mod]
+            nom = NOMBRES[mod]
+            print(f"- [{nom}]")
             for base in ("naive_semanal", "promedio_semanal"):
                 if base in m.index:
-                    print(f"- GLM frente a {NOMBRES[base]}: error por hora {comparar(g['mae_hora'], m.loc[base, 'mae_hora'])}, "
+                    print(f"    frente a {NOMBRES[base]}: error por hora {comparar(g['mae_hora'], m.loc[base, 'mae_hora'])}, "
                           f"error por día {comparar(g['mae_dia'], m.loc[base, 'mae_dia'])}.")
-            print(f"- GLM frente a la naive (MASE): por hora {mejora(g['mase_hora'])}; por día {mejora(g['mase_dia'])}.")
-            print(f"- Error típico del GLM: por hora {pct(g['mae_hora'] / g['media_real_hora'])} de la llegada media por hora; "
+            print(f"    frente a la naive (MASE): por hora {mejora(g['mase_hora'])}; por día {mejora(g['mase_dia'])}.")
+            print(f"    error típico: por hora {pct(g['mae_hora'] / g['media_real_hora'])} de la llegada media por hora; "
                   f"por día {pct(g['mape_dia'])} (MAPE diario).")
             ses = g["sesgo_hora"] / g["media_real_hora"] if g["media_real_hora"] else float("nan")
-            print("- Sesgo: " + ("sin sesgo apreciable" if abs(ses) < 0.03 else
-                                 ("tiende a quedarse corto (subestima) " if ses > 0 else "tiende a pasarse (sobreestima) ")
-                                 + pct(ses)) + ".")
-            print(f"- Intervalo del {int(nivel * 100)} % por día: {cobertura(g.get('cobertura_intervalo_dia'), nivel, 'días')}.")
-            print(f"- Intervalo del {int(nivel * 100)} % por hora: {cobertura(g['cobertura_intervalo'], nivel)} "
-                  "(con conteos chicos por hora el intervalo discreto siempre cubre de más; el diario es el que importa).")
-            mejor = m["mae_dia"].idxmin()
-            print(f"- Mejor modelo por error diario: {NOMBRES.get(mejor, mejor)}.")
+            print("    sesgo: " + ("sin sesgo apreciable" if abs(ses) < 0.03 else
+                                   ("tiende a quedarse corto (subestima) " if ses > 0 else "tiende a pasarse (sobreestima) ")
+                                   + pct(ses)) + ".")
+            print(f"    intervalo del {int(nivel * 100)} % por día (calibrado fuera de muestra): "
+                  f"{cobertura(g.get('cobertura_intervalo_dia'), nivel, 'días')}.")
+            print(f"    intervalo del {int(nivel * 100)} % por hora: {cobertura(g['cobertura_intervalo'], nivel)}.")
+        if "promedio_semanal" in m.index:
+            b = m.loc["promedio_semanal"]
+            print(f"- Línea base 'promedio 4 semanas' (referencia): MAPE diario {pct(b['mape_dia'])}; "
+                  f"intervalo diario {cobertura(b.get('cobertura_intervalo_dia'), nivel, 'días')}.")
+        mejor = m["mae_dia"].idxmin()
+        print(f"- Mejor modelo por error diario (de los cuatro): {NOMBRES.get(mejor, mejor)}.")
+        el = info.get("modelo_elegido")
+        if el:
+            print(f"- Modelo usado para el pronóstico futuro (el mejor de los que usan calendario): {NOMBRES.get(el, el)}.")
+            if el == "glm_nivel":
+                print(f"- Ajuste de nivel reciente: las últimas 4 semanas estuvieron "
+                      f"{comparar(info.get('factor_nivel', 1.0), 1.0)} frente a lo que esperaba el GLM.")
         e = efe[efe["serie"] == serie].set_index("efecto")["multiplicador"]
         for k, nombre in EFECTOS.items():
             if k in e:
