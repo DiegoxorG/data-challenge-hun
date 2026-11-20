@@ -122,3 +122,6 @@ cuellos_botella_salidas/
 
 # Reportes generados con datos (llevan la marca hun-datos; el hook también los bloquea)
 reporte.html
+
+# Notas internas del equipo (pedidos y resúmenes de trabajo; no van al repo del jurado)
+Claude outputs/
